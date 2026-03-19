@@ -45,11 +45,66 @@ bool Sn3002::initialize()
 
 bool Sn3002::read_all_registers()
 {
-    int16_t data[8] = {0};
+    int16_t data[9] = {0};
 
-    modbus_rtu_controller_->read_multiple_registers(sensor_address_, HOLDING_REGISTERS, 0x0000, 8, data);
+    modbus_rtu_controller_->read_multiple_registers(sensor_address_, HOLDING_REGISTERS, MOISTURE_CONTENT_REG_ADDR, 8, data);
+
+    sensor_data_.moisture               = static_cast<float>(data[0]) / 10.0f;
+    sensor_data_.temperature            = static_cast<float>(data[1]) / 10.0f;
+    sensor_data_.conductivity           = static_cast<float>(data[2]);
+    sensor_data_.ph                     = static_cast<float>(data[3]) / 10.0f;
+    sensor_data_.nitrogen               = static_cast<float>(data[4]);
+    sensor_data_.phosphorus             = static_cast<float>(data[5]);
+    sensor_data_.potasium               = static_cast<float>(data[6]);
+    sensor_data_.salinity               = static_cast<float>(data[7]);
+    sensor_data_.total_disolved_solid   = static_cast<float>(data[8]);
 
     return false;
 }
 
+float Sn3002::get_moisture()
+{
+    return sensor_data_.moisture;
 }
+
+float Sn3002::get_temp()
+{
+    return sensor_data_.temperature;
+}
+
+float Sn3002::get_conductivity()
+{
+    return sensor_data_.conductivity;
+}
+
+float Sn3002::get_ph()
+{
+    return sensor_data_.ph;
+}
+
+float Sn3002::get_nitrogen()
+{
+    return sensor_data_.nitrogen;
+}
+
+float Sn3002::get_phosphorus()
+{
+    return sensor_data_.phosphorus;
+}
+
+float Sn3002::get_potasium()
+{
+    return sensor_data_.potasium;
+}
+
+float Sn3002::get_salinity()
+{
+    return sensor_data_.salinity;
+}
+
+float Sn3002::get_total_disolved_solid()
+{
+    return sensor_data_.total_disolved_solid;
+}
+
+} // gms_controller

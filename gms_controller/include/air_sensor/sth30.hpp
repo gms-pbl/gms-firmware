@@ -41,10 +41,25 @@ public:
         float humidity;
         float temperature;
     } SensorData;
+
+    typedef struct SensorFactoryData_ {
+        uint16_t device_addr;
+        uint16_t baud;
+    } SensorFactoryData;
+    
+    typedef struct SensorCorrectionData_ {
+        uint16_t correction;
+    } SensorCorrectionData;
     
     enum Sth30_ReadRegisterAddress {
         HUMIDITY_CONTENT_REG_ADDR               = 0x0000U,
         TEMPERATURE_CONTENT_REG_ADDR            = 0x0001U,
+    };
+
+    enum Sth30_ReadWriteRegisterAddress {
+        DEVICE_ADDRESS_CONTENT_REG_ADDR         = 0x0066U,
+        BAUDRATE_CONTENT_REG_ADDR               = 0x0067U,
+        CORRECTION_CONTENT_REG_ADDR             = 0x006BU,
     };
 
     explicit Sth30(ModbusRtuController * modbus_rtu_controller);
@@ -55,13 +70,25 @@ public:
 
     bool read_all_registers();
 
+    float get_temp();
+
+    float get_humidity();
+
+    uint16_t get_device_address();
+
+    uint16_t get_device_baud();
+    
+    uint16_t get_correction();
+
 private:
 
-    int sensor_address_{1};
+    const int sensor_address_ = 10;
 
     ModbusRtuController * modbus_rtu_controller_;
 
     SensorData sensor_data_{0.0f, 0.0f};
+    SensorFactoryData sensor_factory_data_{0U, 0U};
+    SensorCorrectionData sensor_correction_data_{0U};
 };
 
 } // namespace gms_controller 

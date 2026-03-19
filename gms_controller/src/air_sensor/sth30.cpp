@@ -52,14 +52,44 @@ bool Sth30::read_all_registers()
     sensor_data_.humidity = data[0] / 100.0f;
     sensor_data_.temperature = data[1] / 100.0f;
     
-    Serial.print("Humidity: ");
-    Serial.print(sensor_data_.humidity);
-    Serial.print(" ");
-    Serial.print("Temperature: ");
-    Serial.print(sensor_data_.temperature);
-    Serial.print(" ");
-            
-    return false;
+    delay(100);
+
+    modbus_rtu_controller_->read_multiple_registers(sensor_address_, HOLDING_REGISTERS, DEVICE_ADDRESS_CONTENT_REG_ADDR, 2, data);
+    sensor_factory_data_.device_addr = static_cast<uint16_t>(data[0]);
+    sensor_factory_data_.baud = static_cast<uint16_t>(data[1]);
+
+    delay(100);
+
+    modbus_rtu_controller_->read_multiple_registers(sensor_address_, HOLDING_REGISTERS, CORRECTION_CONTENT_REG_ADDR, 1, data);
+    sensor_correction_data_.correction = data[0];
+
+    return true;
 }
 
+
+float Sth30::get_temp()
+{
+    return sensor_data_.temperature;
 }
+
+float Sth30::get_humidity()
+{
+    return sensor_data_.humidity;
+}
+
+uint16_t Sth30::get_device_address()
+{
+    return sensor_factory_data_.device_addr;
+}
+
+uint16_t Sth30::get_device_baud()
+{
+    return sensor_factory_data_.baud;
+}
+
+uint16_t Sth30::get_correction()
+{
+    return sensor_correction_data_.correction;
+}
+
+} // namespace gms_controller

@@ -45,7 +45,55 @@ void sensorTask() {
 
     for(;;) {
         air_sensor.read_all_registers();
-        // soil_sensor.read_all_registers();
+        Serial.println("--------------- Air sensor -------------------------");
+        Serial.print("Humidity: ");
+        Serial.print(air_sensor.get_humidity());
+        Serial.print("\n");
+        Serial.print("Temperature: ");
+        Serial.print(air_sensor.get_temp());
+        Serial.print("\n");
+        Serial.print("Correction: ");
+        Serial.print(air_sensor.get_correction());
+        Serial.print("\n");
+        Serial.print("Device address: ");
+        Serial.print(air_sensor.get_device_address());
+        Serial.print("\n");
+        Serial.print("Device baud: ");
+        Serial.println(air_sensor.get_device_baud());
+        
+        delay(100);
+        
+        soil_sensor.read_all_registers();
+        Serial.println("--------------- Soil sensor -----------------------");
+        Serial.print("Humidity: ");
+        Serial.print(soil_sensor.get_moisture());
+        Serial.print("\n");
+        Serial.print("Temperature: ");
+        Serial.print(soil_sensor.get_temp());
+        
+        Serial.print("\n");
+        Serial.print("Conductivity: ");
+        Serial.print(soil_sensor.get_conductivity());
+        Serial.print("\n");
+        Serial.print("PH: ");
+        Serial.print(soil_sensor.get_ph());
+        Serial.print("\n");
+        Serial.print("Nitrogen: ");
+        Serial.print(soil_sensor.get_nitrogen());
+        Serial.print("\n");
+        Serial.print("Phosphorus: ");
+        Serial.print(soil_sensor.get_phosphorus());
+        Serial.print("\n");
+        Serial.print("Potasium: ");
+        Serial.print(soil_sensor.get_potasium());
+        Serial.print("\n");
+        Serial.print("Salinity: ");
+        Serial.print(soil_sensor.get_salinity());
+        Serial.print("\n");
+        Serial.print("Total disolved solid: ");
+        Serial.println(soil_sensor.get_total_disolved_solid());
+        Serial.print("\n");
+
         ThisThread::sleep_for(std::chrono::milliseconds(1000));
     }
 }
@@ -54,7 +102,7 @@ void setup()
 {
     rtu_contorller.initilize();
     air_sensor.initialize();
-    // soil_sensor.initialize();
+    soil_sensor.initialize();
 
     sensorThread.start(mbed::callback(sensorTask));
 }

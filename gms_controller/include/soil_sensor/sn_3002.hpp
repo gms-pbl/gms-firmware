@@ -38,8 +38,15 @@ class Sn3002
 public:
 
     typedef struct SensorData_ {
-        float humidity;
+        float moisture;
         float temperature;
+        float conductivity;
+        float ph;
+        float nitrogen;
+        float phosphorus;
+        float potasium;
+        float salinity;
+        float total_disolved_solid;
     } SensorData;
 
     enum Sn3002_ReadRegisterAddress {
@@ -62,6 +69,24 @@ public:
 
     bool read_all_registers();
 
+    float get_moisture();
+
+    float get_temp();
+
+    float get_conductivity();
+
+    float get_ph();
+
+    float get_nitrogen();
+
+    float get_phosphorus();
+
+    float get_potasium();
+    
+    float get_salinity();
+    
+    float get_total_disolved_solid();
+    
 private:
 
     int sensor_address_{1};
