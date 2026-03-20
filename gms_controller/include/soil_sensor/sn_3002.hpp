@@ -61,7 +61,7 @@ public:
         TOTAL_DISSOLVED_SOLIDS_CONTENT_REG_ADDR = 0x0008U,
     };
 
-    explicit Sn3002(ModbusRtuController * modbus_rtu_controller);
+    explicit Sn3002(ModbusRtuController * modbus_rtu_controller, uint8_t device_address);
 
     ~Sn3002();
 
@@ -89,7 +89,7 @@ public:
     
 private:
 
-    int sensor_address_{1};
+    uint8_t device_address_;
 
     ModbusRtuController * modbus_rtu_controller_;
 

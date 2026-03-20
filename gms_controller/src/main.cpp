@@ -36,9 +36,8 @@
 using namespace rtos;
 
 gms_controller::ModbusRtuController rtu_contorller;
-gms_controller::Sth30 air_sensor(&rtu_contorller);
-gms_controller::Sn3002 soil_sensor(&rtu_contorller);
-
+gms_controller::Sth30 air_sensor(&rtu_contorller, 10);
+gms_controller::Sn3002 soil_sensor(&rtu_contorller, 1);
 gms_controller::ModbusTcpController modbus_tcp_controller(&Ethernet);
 
 using namespace rtos;

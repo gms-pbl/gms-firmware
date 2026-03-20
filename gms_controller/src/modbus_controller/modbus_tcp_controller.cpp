@@ -81,7 +81,7 @@ bool ModbusTcpController::initilize()
         return false;
     }
     
-    if(!modbus_tcp_server_.configureHoldingRegisters(0x00, 32)) {
+    if(!modbus_tcp_server_.configureHoldingRegisters(0x00, 22)) {
         Serial.println("Failed to configure holding registers");
         return false;
     }

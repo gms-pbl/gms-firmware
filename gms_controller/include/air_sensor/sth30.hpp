@@ -62,7 +62,7 @@ public:
         CORRECTION_CONTENT_REG_ADDR             = 0x006BU,
     };
 
-    explicit Sth30(ModbusRtuController * modbus_rtu_controller);
+    explicit Sth30(ModbusRtuController * modbus_rtu_controller, uint8_t device_address);
 
     ~Sth30();
 
@@ -82,7 +82,7 @@ public:
 
 private:
 
-    const int sensor_address_ = 10;
+    uint8_t device_address_ = 10;
 
     ModbusRtuController * modbus_rtu_controller_;
 

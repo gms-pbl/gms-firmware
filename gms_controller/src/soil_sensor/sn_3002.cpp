@@ -27,8 +27,9 @@
 namespace gms_controller
 {
 
-Sn3002::Sn3002(ModbusRtuController * modbus_rtu_controller)
-: modbus_rtu_controller_(modbus_rtu_controller)
+Sn3002::Sn3002(ModbusRtuController * modbus_rtu_controller, uint8_t device_address)
+: device_address_(device_address)
+, modbus_rtu_controller_(modbus_rtu_controller)
 {
 
 }
@@ -47,7 +48,7 @@ bool Sn3002::read_all_registers()
 {
     int16_t data[9] = {0};
 
-    modbus_rtu_controller_->read_multiple_registers(sensor_address_, HOLDING_REGISTERS, MOISTURE_CONTENT_REG_ADDR, 8, data);
+    modbus_rtu_controller_->read_multiple_registers(device_address_, HOLDING_REGISTERS, MOISTURE_CONTENT_REG_ADDR, 8, data);
 
     sensor_data_.moisture               = static_cast<float>(data[0]) / 10.0f;
     sensor_data_.temperature            = static_cast<float>(data[1]) / 10.0f;
