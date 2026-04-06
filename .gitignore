@@ -333,3 +333,6 @@ TSWLatexianTemp*
 
 # Jira/Confluence Docs
 **/**/docs/
+
+# Temp files
+**/**/temp/
