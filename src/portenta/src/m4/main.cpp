@@ -43,21 +43,17 @@ void connectMqtt() {
 }
 
 // RPC Callback from M7
-void publish_telemetry(uint8_t* payload, size_t size) {
-    if (size != sizeof(TelemetryIpc)) return;
-
-    TelemetryIpc* telemetry = (TelemetryIpc*)payload;
-
+int publish_telemetry(float airHum, float airTemp, float soilMoist, float soilTemp) {
     if (!mqttClient.connected()) {
         connectMqtt();
     }
 
-    // Serialize to JSON (Simplified for now)
+    // Serialize to JSON
     String jsonPayload = "{";
-    jsonPayload += "\"air_temp\":" + String(telemetry->air_temperature) + ",";
-    jsonPayload += "\"air_hum\":" + String(telemetry->air_humidity) + ",";
-    jsonPayload += "\"soil_moist\":" + String(telemetry->soil_moisture) + ",";
-    jsonPayload += "\"soil_temp\":" + String(telemetry->soil_temperature);
+    jsonPayload += "\"air_temp\":" + String(airTemp) + ",";
+    jsonPayload += "\"air_hum\":" + String(airHum) + ",";
+    jsonPayload += "\"soil_moist\":" + String(soilMoist) + ",";
+    jsonPayload += "\"soil_temp\":" + String(soilTemp);
     jsonPayload += "}";
 
     mqttClient.beginMessage(topic);
@@ -65,6 +61,7 @@ void publish_telemetry(uint8_t* payload, size_t size) {
     mqttClient.endMessage();
 
     Serial.println("Published telemetry: " + jsonPayload);
+    return 1;
 }
 
 void setup() {

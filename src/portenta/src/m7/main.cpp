@@ -40,8 +40,8 @@ void sensorTask() {
             telemetry.soil_tds = soil_sensor.get_total_dissolved_solids();
         }
 
-        // Send struct over IPC to M4
-        RPC.call("publish_telemetry", (uint8_t*)&telemetry, sizeof(TelemetryIpc));
+        // Send over IPC to M4. Pass parameters instead of raw struct or string as RPC library fails with String compilation.
+        auto res = RPC.call("publish_telemetry", telemetry.air_humidity, telemetry.air_temperature, telemetry.soil_moisture, telemetry.soil_temperature).as<int>();
 
         ThisThread::sleep_for(std::chrono::milliseconds(10000)); // Poll every 10 seconds
     }
