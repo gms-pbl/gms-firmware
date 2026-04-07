@@ -19,5 +19,6 @@
 #define MQTT_BROKER "192.168.1.50"
 #define MQTT_PORT 1883
 #define MQTT_TOPIC_TELEMETRY "telemetry/zone1"
+#define MQTT_TOPIC_COMMAND_OUTPUT "commands/zone1/output"
 
 #endif // M4_MAIN_H

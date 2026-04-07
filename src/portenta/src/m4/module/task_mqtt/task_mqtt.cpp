@@ -59,12 +59,51 @@ int publish_telemetry(float airHum, float airTemp, float soilMoist, float soilTe
     return 1;
 }
 
+// Callback for incoming MQTT messages
+void onMqttMessage(int messageSize) {
+    String topic = mqttClient.messageTopic();
+    String payload = "";
+
+    while (mqttClient.available()) {
+        payload += (char)mqttClient.read();
+    }
+
+    Serial.print("Received message on topic: ");
+    Serial.println(topic);
+    Serial.print("Payload: ");
+    Serial.println(payload);
+
+    if (topic == MQTT_TOPIC_COMMAND_OUTPUT) {
+        // Very basic JSON parsing for {"channel": 2, "state": 1}
+        int chanIndex = payload.indexOf("\"channel\":");
+        int stateIndex = payload.indexOf("\"state\":");
+
+        if (chanIndex != -1 && stateIndex != -1) {
+            // Extract the channel and state values
+            int channel = payload.substring(chanIndex + 10, payload.indexOf(',', chanIndex)).toInt();
+            int state = payload.substring(stateIndex + 8, payload.indexOf('}', stateIndex)).toInt();
+
+            // Send command DOWN to M7
+            Serial.print("Sending RPC down to M7 -> set_output(");
+            Serial.print(channel); Serial.print(", "); Serial.print(state); Serial.println(")");
+            
+            RPC.call("set_output", channel, state);
+        } else {
+            Serial.println("Invalid payload format for command.");
+        }
+    }
+}
+
 void init() {
     // Register the RPC function to be callable from M7
     RPC.bind("publish_telemetry", publish_telemetry);
 
     connectNetwork();
     connectMqtt();
+
+    // Subscribe to the command topic and register callback
+    mqttClient.onMessage(onMqttMessage);
+    mqttClient.subscribe(MQTT_TOPIC_COMMAND_OUTPUT);
 }
 
 void process() {

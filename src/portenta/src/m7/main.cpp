@@ -1,5 +1,6 @@
 #include "main.h"
 #include "module/task_sensor/task_sensor.h"
+#include "module/task_io/task_io.h"
 
 using namespace gms_edge;
 
@@ -8,6 +9,7 @@ void setup() {
     RPC.begin();
 
     // Initialize tasks
+    module::task_io::init();
     module::task_sensor::init();
 }
 
