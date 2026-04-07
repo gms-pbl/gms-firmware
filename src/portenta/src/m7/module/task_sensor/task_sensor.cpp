@@ -43,7 +43,7 @@ void execute() {
         telemetry.din_03 = MachineControl_DigitalInputs.read(DIN_READ_CH_PIN_03);
 
         // Send all 15 values over IPC to M4
-        auto res = RPC.call("publish_telemetry", 
+        RPC.call("publish_telemetry", 
             telemetry.air_humidity, 
             telemetry.air_temperature, 
             telemetry.soil_moisture, 
