@@ -5,7 +5,11 @@
 using namespace gms_edge;
 
 void setup() {
+    bootM4();
     Serial.begin(115200);
+    // Give Serial a moment to initialize
+    delay(2000);
+    
     RPC.begin();
 
     // Initialize tasks
