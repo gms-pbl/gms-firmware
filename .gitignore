@@ -336,3 +336,7 @@ TSWLatexianTemp*
 
 # Temp files
 **/**/temp/
+
+# Ignore .env
+**/**/*.env
+
