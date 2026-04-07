@@ -5,7 +5,7 @@
 using namespace gms_edge;
 
 void setup() {
-    bootM4();
+    bootM4(); // Boot the M4 core
     Serial.begin(115200);
     // Wait up to 5 seconds for the Serial monitor to connect
     uint32_t start = millis();
