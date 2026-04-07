@@ -66,14 +66,14 @@ void execute() {
 }
 
 void init() {
+    Serial.println("  [Sensor Task] Initializing Modbus Manager (RS485)...");
+    modbus_manager.initialize();
+
     Serial.println("  [Sensor Task] Initializing Wire (I2C)...");
     Wire.begin();
 
     Serial.println("  [Sensor Task] Initializing Digital Inputs...");
     MachineControl_DigitalInputs.begin();
-    
-    Serial.println("  [Sensor Task] Initializing Modbus Manager...");
-    modbus_manager.initialize();
     
     Serial.println("  [Sensor Task] Initializing Air Sensor...");
     air_sensor.initialize();

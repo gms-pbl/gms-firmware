@@ -28,7 +28,8 @@ void init() {
     Serial.println("Initializing Machine Control I/O...");
 
     // Initialize the I/O expanders and outputs
-    MachineControl_DigitalOutputs.begin();
+    MachineControl_DigitalOutputs.begin(true);
+    MachineControl_DigitalOutputs.writeAll(0);
     
     // Bind the RPC function so the M4 core can call it when an MQTT message arrives
     RPC.bind("set_output", set_output);

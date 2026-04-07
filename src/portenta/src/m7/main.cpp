@@ -1,4 +1,5 @@
 #include "main.h"
+#include <Wire.h>
 #include "module/task_sensor/task_sensor.h"
 #include "module/task_io/task_io.h"
 
@@ -18,13 +19,14 @@ void setup() {
     RPC.begin();
     Serial.println("RPC Initialized.");
 
-    Serial.println("Initializing IO Task...");
-    module::task_io::init();
-    Serial.println("IO Task Initialized.");
-
+    // Match mentor's initialization order: Modbus RS485 -> Wire I2C -> Digital Inputs -> Digital Outputs
     Serial.println("Initializing Sensor Task...");
     module::task_sensor::init();
     Serial.println("Sensor Task Initialized.");
+
+    Serial.println("Initializing IO Task...");
+    module::task_io::init();
+    Serial.println("IO Task Initialized.");
     
     Serial.println("Setup Complete. Entering Loop.");
 }
