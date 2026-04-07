@@ -18,6 +18,7 @@ void setup() {
 }
 
 void loop() {
+    Serial.println("[M7] Heartbeat - Polling sensors...");
     // RTOS threads handle all logic
-    rtos::ThisThread::yield();
+    rtos::ThisThread::sleep_for(std::chrono::seconds(5));
 }
