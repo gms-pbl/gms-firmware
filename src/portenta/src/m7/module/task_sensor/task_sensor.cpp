@@ -1,4 +1,5 @@
 #include "task_sensor.h"
+#include <Arduino_PortentaMachineControl.h>
 
 namespace gms_edge {
 namespace module {
@@ -35,7 +36,13 @@ void execute() {
             telemetry.soil_tds = soil_sensor.get_total_dissolved_solids();
         }
 
-        // Send all 11 values over IPC to M4
+        // Read Digital Inputs 00-03 from DIN Rail
+        telemetry.din_00 = MachineControl_DigitalInputs.read(DIN_READ_CH_PIN_00);
+        telemetry.din_01 = MachineControl_DigitalInputs.read(DIN_READ_CH_PIN_01);
+        telemetry.din_02 = MachineControl_DigitalInputs.read(DIN_READ_CH_PIN_02);
+        telemetry.din_03 = MachineControl_DigitalInputs.read(DIN_READ_CH_PIN_03);
+
+        // Send all 15 values over IPC to M4
         auto res = RPC.call("publish_telemetry", 
             telemetry.air_humidity, 
             telemetry.air_temperature, 
@@ -47,7 +54,11 @@ void execute() {
             telemetry.soil_phosphorus,
             telemetry.soil_potassium,
             telemetry.soil_salinity,
-            telemetry.soil_tds
+            telemetry.soil_tds,
+            telemetry.din_00,
+            telemetry.din_01,
+            telemetry.din_02,
+            telemetry.din_03
         ).as<int>();
 
         ThisThread::sleep_for(std::chrono::milliseconds(SENSOR_POLL_INTERVAL_MS));
@@ -55,6 +66,7 @@ void execute() {
 }
 
 void init() {
+    MachineControl_DigitalInputs.begin();
     modbus_manager.initialize();
     air_sensor.initialize();
     soil_sensor.initialize();

@@ -31,7 +31,7 @@ void connectMqtt() {
 }
 
 // RPC Callback from M7
-int publish_telemetry(float airHum, float airTemp, float soilMoist, float soilTemp, float soilCond, float soilPh, float soilN, float soilP, float soilK, float soilSal, float soilTds) {
+int publish_telemetry(float airHum, float airTemp, float soilMoist, float soilTemp, float soilCond, float soilPh, float soilN, float soilP, float soilK, float soilSal, float soilTds, int din0, int din1, int din2, int din3) {
     if (!mqttClient.connected()) {
         connectMqtt();
     }
@@ -48,7 +48,11 @@ int publish_telemetry(float airHum, float airTemp, float soilMoist, float soilTe
     jsonPayload += "\"soil_p\":" + String(soilP) + ",";
     jsonPayload += "\"soil_k\":" + String(soilK) + ",";
     jsonPayload += "\"soil_salinity\":" + String(soilSal) + ",";
-    jsonPayload += "\"soil_tds\":" + String(soilTds);
+    jsonPayload += "\"soil_tds\":" + String(soilTds) + ",";
+    jsonPayload += "\"din_00\":" + String(din0) + ",";
+    jsonPayload += "\"din_01\":" + String(din1) + ",";
+    jsonPayload += "\"din_02\":" + String(din2) + ",";
+    jsonPayload += "\"din_03\":" + String(din3);
     jsonPayload += "}";
 
     mqttClient.beginMessage(MQTT_TOPIC_TELEMETRY);

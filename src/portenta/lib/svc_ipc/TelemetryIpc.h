@@ -15,6 +15,10 @@ struct TelemetryIpc {
     float soil_potassium;
     float soil_salinity;
     float soil_tds;
+    int din_00;
+    int din_01;
+    int din_02;
+    int din_03;
 };
 
 } // namespace gms_edge
