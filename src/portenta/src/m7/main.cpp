@@ -7,14 +7,26 @@ using namespace gms_edge;
 void setup() {
     bootM4();
     Serial.begin(115200);
-    // Give Serial a moment to initialize
-    delay(2000);
+    // Wait up to 5 seconds for the Serial monitor to connect
+    uint32_t start = millis();
+    while (!Serial && millis() - start < 5000) {
+        delay(10);
+    }
     
+    Serial.println("\n\n--- M7 Core Booting ---");
+    Serial.println("Initializing RPC...");
     RPC.begin();
+    Serial.println("RPC Initialized.");
 
-    // Initialize tasks
+    Serial.println("Initializing IO Task...");
     module::task_io::init();
+    Serial.println("IO Task Initialized.");
+
+    Serial.println("Initializing Sensor Task...");
     module::task_sensor::init();
+    Serial.println("Sensor Task Initialized.");
+    
+    Serial.println("Setup Complete. Entering Loop.");
 }
 
 void loop() {

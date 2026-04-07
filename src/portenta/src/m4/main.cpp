@@ -4,6 +4,8 @@
 using namespace gms_edge;
 
 void setup() {
+    // M4 doesn't have a USB serial port, so Serial.begin connects to the hardware UART.
+    // Instead, RPC will route prints automatically if configured.
     Serial.begin(115200);
     RPC.begin();
 
