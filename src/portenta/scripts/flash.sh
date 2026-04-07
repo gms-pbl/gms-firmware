@@ -17,6 +17,12 @@ echo "Device found! Flashing M7 Core..."
 ~/.platformio/packages/tool-dfuutil-arduino/dfu-util --device 2341:035b -D .pio/build/portenta_h7_m7/firmware.bin -a 0 --dfuse-address=0x08040000:leave
 
 echo ""
+echo "Waiting for the device to leave DFU mode..."
+while ~/.platformio/packages/tool-dfuutil-arduino/dfu-util -l 2>/dev/null | grep -q "2341:035b"; do
+    sleep 1
+done
+
+echo ""
 echo "M7 Flashed. The board has rebooted."
 echo "!!! PLEASE DOUBLE-TAP THE RESET BUTTON AGAIN !!!"
 echo "Waiting for Bootloader..."
