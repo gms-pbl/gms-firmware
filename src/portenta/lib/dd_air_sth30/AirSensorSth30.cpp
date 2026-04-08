@@ -14,9 +14,7 @@ bool AirSensorSth30::initialize() {
 bool AirSensorSth30::read_all_registers() {
     int16_t raw_data[2] = {0};
 
-    if (!_modbus_manager->read_multiple_registers(_device_address, HOLDING_REGISTERS, REG_HUMIDITY, 2, raw_data)) {
-        return false;
-    }
+    bool success = _modbus_manager->read_multiple_registers(_device_address, HOLDING_REGISTERS, REG_HUMIDITY, 2, raw_data);
 
     _data.humidity = raw_data[0] / 100.0f;
     _data.temperature = raw_data[1] / 100.0f;
@@ -34,7 +32,7 @@ bool AirSensorSth30::read_all_registers() {
         _correction_data.correction = raw_data[0];
     }
 
-    return true;
+    return success;
 }
 
 float AirSensorSth30::get_temperature() const { return _data.temperature; }
