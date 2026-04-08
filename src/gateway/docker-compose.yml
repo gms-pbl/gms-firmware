@@ -8,9 +8,9 @@ services:
     ports:
       - "1883:1883"
     volumes:
-      - ./mosquitto/config:/mosquitto/config
-      - ./mosquitto/data:/mosquitto/data
-      - ./mosquitto/log:/mosquitto/log
+      - ./mosquitto/config:/mosquitto/config:z
+      - ./mosquitto/data:/mosquitto/data:z
+      - ./mosquitto/log:/mosquitto/log:z
     restart: unless-stopped
 
   # The Local Decision & Processing Engine
@@ -22,7 +22,7 @@ services:
     depends_on:
       - mosquitto
     volumes:
-      - ./engine:/app
+      - ./engine:/app:z
       - edge_database:/app/data
     restart: unless-stopped
     environment:

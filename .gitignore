@@ -340,3 +340,4 @@ TSWLatexianTemp*
 # Ignore .env
 **/**/*.env
 
+**/**/mosquitto/data/**
