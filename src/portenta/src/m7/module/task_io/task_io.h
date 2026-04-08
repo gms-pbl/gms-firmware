@@ -10,6 +10,7 @@ namespace module {
 namespace task_io {
 
 void init();
+int set_output(int channel, int state);
 
 } // namespace task_io
 } // namespace module
