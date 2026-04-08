@@ -26,7 +26,13 @@ void connectNetwork() {
 
 void connectMqtt() {
     Serial.print("Connecting to MQTT broker...");
-    while (!mqttClient.connect(MQTT_BROKER, MQTT_PORT)) {
+    mqttClient.setConnectionTimeout(5000); // 5 second timeout instead of default 30
+    
+    // Fix: Convert the string IP from .env to an actual IPAddress object
+    IPAddress brokerIP;
+    brokerIP.fromString(MQTT_BROKER);
+
+    while (!mqttClient.connect(brokerIP, MQTT_PORT)) {
         Serial.print(".");
         delay(1000);
     }
