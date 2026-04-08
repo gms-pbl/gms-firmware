@@ -34,6 +34,8 @@ bool ModbusRtuManager::read_multiple_registers(int id, int type, int address, in
         return false;
     } 
 
+    delay(10); // Give the sensor time to push data onto the RS485 bus
+
     int index = 0;
     while (_modbus_client->available() && index < nb) {
         data[index++] = _modbus_client->read();
