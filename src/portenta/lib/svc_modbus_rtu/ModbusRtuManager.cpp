@@ -5,12 +5,15 @@ namespace gms_edge {
 ModbusRtuManager::ModbusRtuManager() {
     _modbus_client = &ModbusRTUClient;
     _rs485_port = &MachineControl_RS485Comm;
+    _baud_rate = 4800UL;
 }
 
 ModbusRtuManager::~ModbusRtuManager() {}
 
-bool ModbusRtuManager::initialize() {
-    _rs485_port->begin(4800, SERIAL_8N1, 0, 500);
+bool ModbusRtuManager::initialize(unsigned long baud_rate) {
+    _baud_rate = baud_rate;
+
+    _rs485_port->begin(_baud_rate, SERIAL_8N1, 0, 500);
     _rs485_port->setYZTerm(false);
     _rs485_port->setABTerm(false);
     _rs485_port->setFullDuplex(false);
@@ -18,7 +21,7 @@ bool ModbusRtuManager::initialize() {
     _rs485_port->setDelays(1000, 5000);
     _rs485_port->setModeRS232(false);
 
-    if (!_modbus_client->begin(*_rs485_port, 4800, SERIAL_8N1)) {
+    if (!_modbus_client->begin(*_rs485_port, _baud_rate, SERIAL_8N1)) {
         Serial.println("Failed to start Modbus RTU Client!");
         return false;
     }
@@ -33,6 +36,11 @@ bool ModbusRtuManager::read_multiple_registers(int id, int type, int address, in
         Serial.println(_modbus_client->lastError());
         return false;
     } 
+
+    uint32_t wait_start = millis();
+    while (_modbus_client->available() < nb && (millis() - wait_start) < 50) {
+        delay(1);
+    }
 
     int index = 0;
     while (_modbus_client->available() && index < nb) {
@@ -58,6 +66,10 @@ bool ModbusRtuManager::write_single_register(int id, int address, uint16_t value
     }
 
     return true;
+}
+
+unsigned long ModbusRtuManager::current_baud_rate() const {
+    return _baud_rate;
 }
 
 } // namespace gms_edge

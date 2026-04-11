@@ -29,6 +29,19 @@ bool SoilSensorSn3002::read_all_registers() {
     return success;
 }
 
+bool SoilSensorSn3002::set_device_address(uint8_t new_address) {
+    if (!_modbus_manager->write_single_register(_device_address, REG_DEVICE_ADDRESS, new_address)) {
+        return false;
+    }
+
+    _device_address = new_address;
+    return true;
+}
+
+bool SoilSensorSn3002::set_device_baud_rate_code(uint16_t baud_rate_code) {
+    return _modbus_manager->write_single_register(_device_address, REG_DEVICE_BAUD_RATE, baud_rate_code);
+}
+
 float SoilSensorSn3002::get_moisture() const { return _data.moisture; }
 float SoilSensorSn3002::get_temperature() const { return _data.temperature; }
 float SoilSensorSn3002::get_conductivity() const { return _data.conductivity; }

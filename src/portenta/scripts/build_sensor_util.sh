@@ -1,3 +1,3 @@
 #!/bin/bash
 cd "$(dirname "$0")/.."
-pio run -e test
+pio run -e sensor_util

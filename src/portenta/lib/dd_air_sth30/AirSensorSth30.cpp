@@ -14,10 +14,10 @@ bool AirSensorSth30::initialize() {
 bool AirSensorSth30::read_all_registers() {
     int16_t raw_data[2] = {0};
 
-    bool success = _modbus_manager->read_multiple_registers(_device_address, HOLDING_REGISTERS, REG_HUMIDITY, 2, raw_data);
+    bool success = _modbus_manager->read_multiple_registers(_device_address, HOLDING_REGISTERS, REG_TEMPERATURE, 2, raw_data);
 
-    _data.humidity = raw_data[0] / 100.0f;
-    _data.temperature = raw_data[1] / 100.0f;
+    _data.temperature = raw_data[0] / 100.0f;
+    _data.humidity = raw_data[1] / 100.0f;
     
     delay(100);
 

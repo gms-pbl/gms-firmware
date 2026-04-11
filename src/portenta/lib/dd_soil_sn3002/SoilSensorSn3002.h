@@ -28,6 +28,8 @@ public:
         REG_POTASSIUM = 0x0006,
         REG_SALINITY = 0x0007,
         REG_TDS = 0x0008,
+        REG_DEVICE_ADDRESS = 0x07D0,
+        REG_DEVICE_BAUD_RATE = 0x07D1,
     };
 
     explicit SoilSensorSn3002(ModbusRtuManager* modbus_manager, uint8_t device_address);
@@ -35,6 +37,8 @@ public:
 
     bool initialize();
     bool read_all_registers();
+    bool set_device_address(uint8_t new_address);
+    bool set_device_baud_rate_code(uint16_t baud_rate_code);
 
     float get_moisture() const;
     float get_temperature() const;

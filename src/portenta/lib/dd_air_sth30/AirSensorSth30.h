@@ -21,8 +21,8 @@ public:
     };
     
     enum RegisterAddress {
-        REG_HUMIDITY = 0x0000,
-        REG_TEMPERATURE = 0x0001,
+        REG_TEMPERATURE = 0x0000,
+        REG_HUMIDITY = 0x0001,
         REG_DEVICE_ADDRESS = 0x0066,
         REG_BAUDRATE = 0x0067,
         REG_CORRECTION = 0x006B,
