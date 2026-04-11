@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # The Local MQTT Broker
   mosquitto:
@@ -34,6 +32,7 @@ services:
       - CLOUD_PASSWORD=secret_cert_or_pass
 
   simulator_hw:
+    profiles: ["simulator"]
     build:
       context: ./simulator-hw
       dockerfile: Dockerfile
