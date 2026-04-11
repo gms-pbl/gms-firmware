@@ -14,7 +14,7 @@ bool SoilSensorSn3002::initialize() {
 bool SoilSensorSn3002::read_all_registers() {
     int16_t raw_data[9] = {0};
 
-    bool success = _modbus_manager->read_multiple_registers(_device_address, HOLDING_REGISTERS, REG_MOISTURE, 8, raw_data);
+    bool success = _modbus_manager->read_multiple_registers(_device_address, HOLDING_REGISTERS, REG_MOISTURE, 9, raw_data);
 
     _data.moisture               = static_cast<float>(raw_data[0]) / 10.0f;
     _data.temperature            = static_cast<float>(raw_data[1]) / 10.0f;
