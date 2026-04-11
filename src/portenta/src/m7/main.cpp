@@ -16,7 +16,7 @@ void setup() {
     
     Serial.println("\n\n--- M7 Core Booting (Unified WiFi Architecture) ---");
 
-    // Match mentor's initialization order: Modbus RS485 -> Wire I2C -> Digital Inputs -> Digital Outputs
+    // Initialization order: Modbus RS485 -> Wire I2C -> Digital Inputs -> Digital Outputs
     Serial.println("Initializing Sensor Task...");
     module::task_sensor::init();
     Serial.println("Sensor Task Initialized.");
