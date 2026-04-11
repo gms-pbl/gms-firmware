@@ -34,12 +34,29 @@ bool ModbusRtuManager::read_multiple_registers(int id, int type, int address, in
         return false;
     } 
 
-    delay(10); // Give the sensor time to push data onto the RS485 bus
-
     int index = 0;
     while (_modbus_client->available() && index < nb) {
         data[index++] = _modbus_client->read();
     }
+
+    if (index != nb) {
+        Serial.print("Incomplete Modbus response. Expected ");
+        Serial.print(nb);
+        Serial.print(" registers, got ");
+        Serial.println(index);
+        return false;
+    }
+
+    return true;
+}
+
+bool ModbusRtuManager::write_single_register(int id, int address, uint16_t value) {
+    if (!_modbus_client->holdingRegisterWrite(id, address, value)) {
+        Serial.print("Failed to write register: ");
+        Serial.println(_modbus_client->lastError());
+        return false;
+    }
+
     return true;
 }
 

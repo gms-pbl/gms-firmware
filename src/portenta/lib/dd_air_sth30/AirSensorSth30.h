@@ -33,6 +33,8 @@ public:
 
     bool initialize();
     bool read_all_registers();
+    bool set_device_address(uint8_t new_address);
+    bool set_device_baud_rate_code(uint16_t baud_rate_code);
 
     float get_temperature() const;
     float get_humidity() const;

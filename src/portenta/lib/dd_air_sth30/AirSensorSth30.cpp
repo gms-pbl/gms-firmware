@@ -35,6 +35,25 @@ bool AirSensorSth30::read_all_registers() {
     return success;
 }
 
+bool AirSensorSth30::set_device_address(uint8_t new_address) {
+    if (!_modbus_manager->write_single_register(_device_address, REG_DEVICE_ADDRESS, new_address)) {
+        return false;
+    }
+
+    _device_address = new_address;
+    _factory_data.device_addr = new_address;
+    return true;
+}
+
+bool AirSensorSth30::set_device_baud_rate_code(uint16_t baud_rate_code) {
+    if (!_modbus_manager->write_single_register(_device_address, REG_BAUDRATE, baud_rate_code)) {
+        return false;
+    }
+
+    _factory_data.baud = baud_rate_code;
+    return true;
+}
+
 float AirSensorSth30::get_temperature() const { return _data.temperature; }
 float AirSensorSth30::get_humidity() const { return _data.humidity; }
 uint16_t AirSensorSth30::get_device_address() const { return _factory_data.device_addr; }
