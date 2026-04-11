@@ -1,0 +1,67 @@
+services:
+  # The Local MQTT Broker
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: gms_local_broker
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config:z
+      - ./mosquitto/data:/mosquitto/data:z
+      - ./mosquitto/log:/mosquitto/log:z
+    restart: unless-stopped
+
+  # The Local Decision & Processing Engine
+  edge_engine:
+    build:
+      context: ./engine
+      dockerfile: Dockerfile
+    container_name: gms_edge_engine
+    depends_on:
+      - mosquitto
+    volumes:
+      - ./engine:/app:z
+      - edge_database:/app/data
+    restart: unless-stopped
+    environment:
+      - LOCAL_BROKER_HOST=mosquitto
+      - LOCAL_BROKER_PORT=1883
+      - CLOUD_BROKER_HOST=emqx.cloud.example.com # Replace later
+      - CLOUD_BROKER_PORT=8883
+      - CLOUD_USERNAME=edge_gateway_1
+      - CLOUD_PASSWORD=secret_cert_or_pass
+
+  simulator_hw:
+    profiles: ["simulator"]
+    build:
+      context: ./simulator-hw
+      dockerfile: Dockerfile
+    container_name: gms_simulator_hw
+    user: "1000:1000"
+    working_dir: /app
+    command: sh -lc "bun install --ignore-scripts && bun run dev --host 0.0.0.0 --port 4173"
+    depends_on:
+      - mosquitto
+    ports:
+      - "4173:4173"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=4173
+      - MQTT_HOST=mosquitto
+      - MQTT_PORT=1883
+      - TELEMETRY_TOPIC=telemetry/zone1
+      - COMMAND_TOPIC=commands/zone1/output
+      - PUBLISH_INTERVAL_MS=10000
+      - AUTO_CONNECT=true
+      - SIM_DATA_DIR=/app/sim-data
+      - CHOKIDAR_USEPOLLING=true
+    volumes:
+      - ./simulator-hw:/app:z
+      - simulator_hw_data:/app/sim-data
+    restart: unless-stopped
+
+volumes:
+  edge_database:
+    name: gms_edge_sqlite_db
+  simulator_hw_data:
+    name: gms_simulator_hw_data

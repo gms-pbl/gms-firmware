@@ -1,0 +1,31 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - heading "999 Search" [level=1] [ref=e3]
+    - generic [ref=e4]:
+      - textbox "Search listings…" [ref=e5]
+      - button "Search" [ref=e6] [cursor=pointer]
+  - generic [ref=e7]:
+    - complementary [ref=e8]:
+      - generic [ref=e9]:
+        - heading "Offer Type" [level=3] [ref=e10]
+        - combobox [ref=e11]:
+          - option "All" [selected]
+      - generic [ref=e12]:
+        - heading "Posted by" [level=3] [ref=e13]
+        - combobox [ref=e14]:
+          - option "Anyone" [selected]
+      - generic [ref=e15]:
+        - heading "Price" [level=3] [ref=e16]
+        - combobox [ref=e17]:
+          - option "Any currency" [selected]
+        - generic [ref=e18]:
+          - spinbutton [ref=e19]
+          - spinbutton [ref=e20]
+      - generic [ref=e21]:
+        - heading "Region" [level=3] [ref=e22]
+        - combobox [ref=e23]:
+          - option "All regions" [selected]
+      - button "Clear filters" [ref=e25] [cursor=pointer]
+    - main [ref=e26]:
+      - generic [ref=e27]: 0 results
+      - generic [ref=e29]: No results found.

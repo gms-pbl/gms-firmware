@@ -1,0 +1,555 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - link "Русский" [expanded] [ref=e8] [cursor=pointer]:
+          - /url: "#"
+          - text: Русский
+        - text: "|"
+        - generic [ref=e10]:
+          - combobox [ref=e11]
+          - combobox "Доллары (USD)" [ref=e14] [cursor=pointer]:
+            - generic "Доллары (USD)" [ref=e15]
+        - text: "|"
+      - generic [ref=e18]:
+        - link "Впервые на ZenMarket?" [ref=e19] [cursor=pointer]:
+          - /url: https://zenmarket.jp/ru/quickguide.aspx
+        - text: "|"
+        - link "О нас" [ref=e20] [cursor=pointer]:
+          - /url: https://zenmarket.jp/ru/about.aspx
+        - text: "|"
+        - link "Блог" [ref=e21] [cursor=pointer]:
+          - /url: https://zenmarket.jp/ru/blog.aspx
+        - text: "|"
+        - link "Помощь" [ref=e22] [cursor=pointer]:
+          - /url: https://zenmarket.jp/ru/help.aspx
+    - generic [ref=e23]:
+      - link "Калькулятор" [ref=e24] [cursor=pointer]:
+        - /url: ../calc.aspx
+      - generic [ref=e26]:
+        - link "zenmarket" [ref=e28] [cursor=pointer]:
+          - /url: https://zenmarket.jp/ru/
+          - img "zenmarket" [ref=e29]
+        - generic [ref=e31]:
+          - link "Все" [ref=e33] [cursor=pointer]:
+            - /url: "#"
+            - text: Все
+          - textbox "Вставьте сюда ссылку или название товара" [ref=e35]
+          - link "" [ref=e36] [cursor=pointer]:
+            - /url: javascript:__doPostBack('header1$btnSearch','')
+            - generic [ref=e37]: 
+        - generic [ref=e38]:
+          - link "Вход" [ref=e39] [cursor=pointer]:
+            - /url: "#signinModal"
+          - generic [ref=e40]: "|"
+          - link "Регистрация" [ref=e41] [cursor=pointer]:
+            - /url: ../signup.aspx
+    - generic [ref=e45]:
+      - link "Amazon" [ref=e46] [cursor=pointer]:
+        - /url: https://zenmarket.jp/ru/amazon.aspx
+      - link "Rakuten" [ref=e47] [cursor=pointer]:
+        - /url: https://zenmarket.jp/ru/rakuten.aspx
+      - link "JDirectItems Auction" [ref=e48] [cursor=pointer]:
+        - /url: https://zenmarket.jp/ru/yahoo.aspx
+      - generic [ref=e50] [cursor=pointer]:
+        - text: Mercari
+        - img [ref=e52]
+      - generic [ref=e55] [cursor=pointer]:
+        - text: Rakuma
+        - img [ref=e57]
+      - generic [ref=e59] [cursor=pointer]:
+        - generic [ref=e60]: Комиссия ниже
+        - generic [ref=e61]:
+          - text: Рекомендуем
+          - img [ref=e63]
+      - generic [ref=e66] [cursor=pointer]:
+        - text: Другие магазины
+        - img [ref=e68]
+    - generic [ref=e70]:
+      - generic [ref=e72]:
+        - generic [ref=e73]: ДЛЯ ПОЛЬЗОВАТЕЛЕЙ ИЗ РФ И РБ ПОКУПКИ И ДОСТАВКА НЕДОСТУПНЫ.
+        - link "ВНИМАНИЕ" [ref=e74] [cursor=pointer]:
+          - /url: https://zenmarket.jp/?topbanner=ru
+      - generic [ref=e76]:
+        - generic [ref=e77]: Скидка 50% на комиссию Для участников Программы Лояльности
+        - link "ПОЛУЧИТЬ" [ref=e78] [cursor=pointer]:
+          - /url: https://discover-ru.zenmarket.jp/campaigns/zenbirthday/zen12-birthday?topbanner=ru
+    - text:    
+    - dialog [active] [ref=e79]:
+      - generic [ref=e81]:
+        - generic [ref=e82]:
+          - button [ref=e83] [cursor=pointer]: ×
+          - generic [ref=e84]:
+            - generic [ref=e85]: Впервые на сайте?
+            - generic [ref=e86]: Введите свой email и получите
+            - generic [ref=e87]: 500 ZenПойнтов
+            - generic [ref=e88]: на ваш счет ZenMarket!
+        - generic [ref=e89]:
+          - generic [ref=e90]:
+            - textbox [ref=e91]:
+              - /placeholder: Введите ваш email
+            - button [ref=e93] [cursor=pointer]: Получить 500 ZenПойнтов
+          - button [ref=e95] [cursor=pointer]: Нет, спасибо
+    - text: 
+    - generic [ref=e97]:
+      - generic [ref=e98]:
+        - text: Пользуясь нашим сайтом, вы соглашаетесь с нашей
+        - link "Политикой конфиденциальности и использования файлов cookie" [ref=e99] [cursor=pointer]:
+          - /url: https://zenmarket.jp/ru/privacy.aspx
+        - text: .
+      - generic [ref=e100]:
+        - link "Принять" [ref=e101] [cursor=pointer]:
+          - /url: "#"
+        - link "Отклонить" [ref=e102] [cursor=pointer]:
+          - /url: "#"
+    - generic [ref=e103]:
+      - generic [ref=e114]:
+        - generic [ref=e115]:
+          - generic [ref=e116]: Мы помогаем
+          - generic [ref=e117]: Фиксированная сервисная комиссия
+          - generic [ref=e118]: от ¥300
+          - generic [ref=e119]:
+            - text: за позицию.
+            - link "Что включено?" [ref=e120] [cursor=pointer]:
+              - /url: https://zenmarket.jp/ru/fees.aspx#FeeIncludes
+        - generic [ref=e121]:
+          - generic [ref=e122]: делать покупки
+          - generic [ref=e123]: Банковская карта
+          - generic [ref=e124]: Paypal,
+          - generic [ref=e125]: Банковский перевод
+        - generic [ref=e126]:
+          - generic [ref=e127]: товаров из Японии
+          - generic [ref=e128]: Rakuten
+          - generic [ref=e129]: Amazon
+          - generic [ref=e130]: Mercari
+          - generic [ref=e131]: Другие онлайн-магазины
+        - generic [ref=e132]:
+          - generic [ref=e133]: и отправляем их
+          - generic [ref=e134]: EMS
+          - generic [ref=e135]: Авиапочта
+          - generic [ref=e136]: Zen Express
+          - generic [ref=e137]: DHL
+        - generic [ref=e138]:
+          - generic [ref=e139]: к вам домой
+          - generic [ref=e140]: Украина
+          - generic [ref=e141]: Казахстан
+          - generic [ref=e142]: Узбекистан
+          - generic [ref=e143]: Другие страны
+      - tabpanel [ref=e146]:
+        - tablist [ref=e147]:
+          - tab "Как покупать в японских магазинах через ZenMarket" [ref=e148]:
+            - heading "Как покупать в японских магазинах через ZenMarket" [level=2] [ref=e149]
+          - tab "Как делать ставки на аукционе через ZenMarket" [ref=e150] [cursor=pointer]:
+            - heading "Как делать ставки на аукционе через ZenMarket" [level=2] [ref=e151]
+        - generic [ref=e152]:
+          - tabpanel [ref=e153]:
+            - generic [ref=e156]:
+              - generic [ref=e157]:
+                - generic [ref=e159]: 
+                - generic [ref=e160]:
+                  - heading "Добавьте товар в корзину" [level=3] [ref=e161]
+                  - paragraph [ref=e162]: Добавьте ссылку на товар с любого японского онлайн-магазина в корзину и нажмите "Оформить заказ"
+              - generic [ref=e163]:
+                - generic [ref=e165]: 
+                - generic [ref=e166]:
+                  - heading "Оформление заказа" [level=3] [ref=e167]
+                  - paragraph [ref=e168]: ZenMarket проверит цены, наличие товара у продавца и выставит счет
+              - generic [ref=e169]:
+                - generic [ref=e171]: 
+                - generic [ref=e172]:
+                  - heading "Оплата товаров" [level=3] [ref=e173]
+                  - paragraph [ref=e174]: Когда цены будут подтверждены вы сможете заплатить за ваши товары
+              - generic [ref=e175]:
+                - generic [ref=e177]: 
+                - generic [ref=e178]:
+                  - heading "Подождите определенное время" [level=3] [ref=e179]
+                  - paragraph [ref=e180]: ZenMarket закажет ваши товары у продавца. Магазин вышлет товары нам на склад.
+              - generic [ref=e181]:
+                - generic [ref=e183]: 
+                - generic [ref=e184]:
+                  - heading "Оформление международной доставки" [level=3] [ref=e185]
+                  - paragraph [ref=e186]: Когда товары прибудут на склад, создайте посылку с нужным адресом и способом доставки.
+              - generic [ref=e187]:
+                - generic [ref=e189]: 
+                - generic [ref=e190]:
+                  - heading "Оплата доставки" [level=3] [ref=e191]
+                  - paragraph [ref=e192]: Когда мы взвесим вашу посылку, вы сможете заплатить за международную доставку
+              - generic [ref=e193]:
+                - generic [ref=e195]: 
+                - generic [ref=e196]:
+                  - heading "Получение посылки" [level=3] [ref=e197]
+                  - paragraph [ref=e198]: Подождите 1-2 недели, пока посылка будет доставлена по указанному адресу
+          - text:      
+      - generic [ref=e200]:
+        - link "Наши преимущества" [ref=e203] [cursor=pointer]:
+          - /url: advantages.aspx
+          - heading "Наши преимущества" [level=2] [ref=e204]
+        - generic [ref=e205]:
+          - generic [ref=e206]:
+            - img [ref=e208]
+            - heading "Прозрачная комиссия" [level=3] [ref=e213]
+            - generic [ref=e214]:
+              - text: Мы взимаем фиксированную комиссию за каждый уникальный товар или лот.
+              - link "Подробнее" [ref=e215] [cursor=pointer]:
+                - /url: https://zenmarket.jp/fees.aspx#main
+          - generic [ref=e218]:
+            - img [ref=e220]
+            - heading "Ставки на японских аукционах" [level=3] [ref=e223]
+            - generic [ref=e224]: Участвуйте в японских аукционах из-за границы в реальном времени!
+          - generic [ref=e227]:
+            - img [ref=e229]
+            - heading "Тысячи магазинов — одна корзина" [level=3] [ref=e232]
+            - generic [ref=e233]: Покупайте с единого аккаунта ZenMarket в любых японских магазинах!
+          - generic [ref=e236]:
+            - img [ref=e238]
+            - heading "Программа Лояльности" [level=3] [ref=e241]
+            - generic [ref=e242]:
+              - text: Опция покупки в кредит и кешбэк для постоянных пользователей.
+              - link "Подробнее" [ref=e243] [cursor=pointer]:
+                - /url: https://zenmarket.jp/ru/payment.aspx#Loyalty_program
+          - generic [ref=e246]:
+            - img [ref=e248]
+            - heading "Экономия на доставке" [level=3] [ref=e252]
+            - generic [ref=e253]: Бесплатная консолидация товаров в посылки и страховка отправления. Покупайте с различных сайтов и экономьте на международной доставке с ZenMarket.
+      - generic [ref=e256]:
+        - generic [ref=e257]:
+          - heading "Как начать пользоваться?" [level=3] [ref=e258]
+          - generic [ref=e259]: Поищите товары из Японии в одном из магазинов или воспользуйтесь разделом Помощь
+        - generic [ref=e261]:
+          - link "Rakuten" [ref=e262] [cursor=pointer]:
+            - /url: rakuten.aspx
+          - link "Amazon" [ref=e263] [cursor=pointer]:
+            - /url: amazon.aspx
+          - link "Rakuma" [ref=e264] [cursor=pointer]:
+            - /url: rakuma.aspx
+          - link "JDirectItems Auction" [ref=e265] [cursor=pointer]:
+            - /url: yahoo.aspx
+          - link "JDirectItems Shopping" [ref=e266] [cursor=pointer]:
+            - /url: yshopping.aspx
+          - link "Mercari" [ref=e267] [cursor=pointer]:
+            - /url: mercari.aspx
+          - link "Рекомендованные магазины" [ref=e268] [cursor=pointer]:
+            - /url: othershops.aspx
+          - link "Помощь" [ref=e269] [cursor=pointer]:
+            - /url: help.aspx
+      - generic [ref=e270]:
+        - generic:
+          - generic [ref=e271]:
+            - link "Последнее в блогах" [ref=e272] [cursor=pointer]:
+              - /url: blog.aspx
+              - heading "Последнее в блогах" [level=3] [ref=e273]
+            - generic [ref=e274]:
+              - generic [ref=e275]:
+                - link [ref=e276] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/blog/post/16457/лучшие-японские-товары-ручной-работы
+                - 'heading "Лучшие японские товары ручной работы: изучаем японский хендмейд" [level=4] [ref=e277]':
+                  - 'link "Лучшие японские товары ручной работы: изучаем японский хендмейд" [ref=e278] [cursor=pointer]':
+                    - /url: https://zenmarket.jp/ru/blog/post/16457/лучшие-японские-товары-ручной-работы
+                - generic [ref=e279]: 02 апр 2026
+                - generic [ref=e280]: Японский декор ручной работы впечатляет своим качеством, разнообразием и уникальностью. Это и современный японский хендмейд с затейливым дизайном, и удивительные изделия в технике японских традиционных ремесел. Какие японские товары ручной работы стоят вашего внимания – ищите в нашем нескучном обзоре!
+              - generic [ref=e281]:
+                - link [ref=e282] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/blog/post/16436/популярные-виды-спорта-в-японии
+                - 'heading "Популярные виды спорта в Японии: японский спорт и его особенности" [level=4] [ref=e283]':
+                  - 'link "Популярные виды спорта в Японии: японский спорт и его особенности" [ref=e284] [cursor=pointer]':
+                    - /url: https://zenmarket.jp/ru/blog/post/16436/популярные-виды-спорта-в-японии
+                - generic [ref=e285]: 26 мар 2026
+                - generic [ref=e286]: Япония – одна из самых спортивных стран на планете, где любовь к спорту прививается еще со школы. Популярные виды спорта в Японии включают как привезенные иностранцами в конце 19 века бейсбол, футбол и баскетбол, так и традиционные японские виды спорта – сумо, каратэ, дзюдо, кэндо и другие. Все о специфике японского спорта и его самых популярных дисциплинах – читайте в нашем спортивном обзоре!
+              - generic [ref=e287]:
+                - link [ref=e288] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/blog/post/16437/zl-гайд-по-японской-рыбалке
+                - 'heading "Гайд по японской рыбалке: культура, сезоны, стили и снасти" [level=4] [ref=e289]':
+                  - 'link "Гайд по японской рыбалке: культура, сезоны, стили и снасти" [ref=e290] [cursor=pointer]':
+                    - /url: https://zenmarket.jp/ru/blog/post/16437/zl-гайд-по-японской-рыбалке
+                - generic [ref=e291]: 24 мар 2026
+                - generic [ref=e292]: Откройте для себя японскую культуру рыбалки во всех подробностях, которые могут быть интересны заядлым рыбакам. Какие снасти предпочитают японские рыболовы, как японская рыбалка отличается в разные сезоны, и на какие ее стили стоит обратить внимание – читайте в нашем подробном гайде!
+          - generic [ref=e293]:
+            - link "Новости" [ref=e294] [cursor=pointer]:
+              - /url: blog.aspx
+              - heading "Новости" [level=3] [ref=e295]
+            - generic [ref=e296]:
+              - generic [ref=e299]:
+                - link [ref=e300] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/blog/post/16418/middle-east-shipping-disruptions-updates
+                - heading "Перебои в доставке на Ближний Восток — последняя информация" [level=4] [ref=e301]:
+                  - link "Перебои в доставке на Ближний Восток — последняя информация" [ref=e302] [cursor=pointer]:
+                    - /url: https://zenmarket.jp/ru/blog/post/16418/middle-east-shipping-disruptions-updates
+                - generic [ref=e303]: 16 мар 2026
+                - generic [ref=e304]: Проверьте свежую информацию о сбоях в международной доставке для направлений на Ближнем Востоке. Отслеживайте приостановку рейсов перевозчиками, затронутые страны и изменения в работе компаний.
+              - link [ref=e305] [cursor=pointer]:
+                - /url: "#newsCarousel"
+              - link [ref=e306] [cursor=pointer]:
+                - /url: "#newsCarousel"
+      - generic [ref=e307]:
+        - link "Последние отзывы" [ref=e309] [cursor=pointer]:
+          - /url: responses.aspx
+          - heading "Последние отзывы" [level=3] [ref=e310]
+        - generic [ref=e311]:
+          - link "Привезли за 9 дней! всё тщательно упаковано, и очень бережно!<br/>вот бы доставка стоила чуть дешевле😅 Мир, Узбекистан 5 out of 5" [ref=e313] [cursor=pointer]:
+            - /url: responses.aspx
+            - generic [ref=e315]: Привезли за 9 дней! всё тщательно упаковано, и очень бережно!<br/>вот бы доставка стоила чуть дешевле😅
+            - generic [ref=e316]:
+              - text: Мир, Узбекистан
+              - generic "Rated 5 out of 5" [ref=e317]:
+                - generic [ref=e318]:
+                  - generic [ref=e319]: "5"
+                  - generic [ref=e320]: out of 5
+          - link "Всё пришло в лучшем виде! Благодарю всю команду за отличную работу и отношение к клиентам. С наилучшими пожеланиями Александр алекс***, Казахстан 5 out of 5" [ref=e322] [cursor=pointer]:
+            - /url: responses.aspx
+            - generic [ref=e324]: Всё пришло в лучшем виде! Благодарю всю команду за отличную работу и отношение к клиентам. С наилучшими пожеланиями Александр
+            - generic [ref=e325]:
+              - text: алекс***, Казахстан
+              - generic "Rated 5 out of 5" [ref=e326]:
+                - generic [ref=e327]:
+                  - generic [ref=e328]: "5"
+                  - generic [ref=e329]: out of 5
+          - link "Всё этапы прошли гладко, есть инструкция и хорошо слаженная работа системы. К тому же посылку надёжно запаковали クルクル, Казахстан 5 out of 5" [ref=e331] [cursor=pointer]:
+            - /url: responses.aspx
+            - generic [ref=e333]: Всё этапы прошли гладко, есть инструкция и хорошо слаженная работа системы. К тому же посылку надёжно запаковали
+            - generic [ref=e334]:
+              - text: クルクル, Казахстан
+              - generic "Rated 5 out of 5" [ref=e335]:
+                - generic [ref=e336]:
+                  - generic [ref=e337]: "5"
+                  - generic [ref=e338]: out of 5
+        - link "Посмотреть все отзывы" [ref=e340] [cursor=pointer]:
+          - /url: responses.aspx
+      - generic [ref=e343]:
+        - paragraph [ref=e344]:
+          - link "Зарегистрироваться (и получить 500 ZenПойнтов)" [ref=e345] [cursor=pointer]:
+            - /url: https://zenmarket.jp/signup.aspx#main
+            - text: Зарегистрироваться
+            - text: (и получить 500 ZenПойнтов)
+        - paragraph [ref=e346]:
+          - link "К каталогу товаров (Смотреть по категориям)" [ref=e347] [cursor=pointer]:
+            - /url: https://discover-ru.zenmarket.jp/showcase
+            - text: К каталогу товаров
+            - text: (Смотреть по категориям)
+      - text: 
+    - generic [ref=e349]:
+      - generic [ref=e350]:
+        - generic [ref=e353]:
+          - generic [ref=e354]:
+            - heading "О нас" [level=4] [ref=e355]
+            - list [ref=e357]:
+              - listitem [ref=e358]:
+                - link "О компании" [ref=e359] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/about.aspx
+              - listitem [ref=e360]:
+                - link "Чем мы отличаемся?" [ref=e361] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/advantages.aspx
+              - listitem [ref=e362]:
+                - link "Политика конфиденциальности и использования файлов cookie" [ref=e363] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/privacy.aspx
+              - listitem [ref=e364]:
+                - link "Условия пользования" [ref=e365] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/useragreement.aspx
+              - listitem [ref=e366]:
+                - link "Обратная связь" [ref=e367] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/help.aspx#feedback
+              - listitem [ref=e368]:
+                - link "Наша ответственность" [ref=e369] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/responsibility.aspx
+              - listitem [ref=e370]:
+                - link "Отзывы" [ref=e371] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/responses.aspx
+          - generic [ref=e372]:
+            - heading "Японские товары" [level=4] [ref=e373]
+            - list [ref=e375]:
+              - listitem [ref=e376]:
+                - link "Магазин ZenPlus" [ref=e377] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/marketplace.aspx
+              - listitem [ref=e378]:
+                - link "Магазин Rakuten" [ref=e379] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/rakuten.aspx
+              - listitem [ref=e380]:
+                - link "Магазин Amazon" [ref=e381] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/amazon.aspx
+              - listitem [ref=e382]:
+                - link "JDirectItems Auction" [ref=e383] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/yahoo.aspx
+              - listitem [ref=e384]:
+                - link "JDirectItems Shopping" [ref=e385] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/yshopping.aspx
+              - listitem [ref=e386]:
+                - link "Rakuma" [ref=e387] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/rakuma.aspx
+              - listitem [ref=e388]:
+                - link "Mercari" [ref=e389] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/mercari.aspx
+              - listitem [ref=e390]:
+                - link "Рекомендованные магазины" [ref=e391] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/recommendedshops.aspx
+              - listitem [ref=e392]:
+                - link "Калькулятор" [ref=e393] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/calc.aspx
+              - listitem [ref=e394]:
+                - link "Каталог товаров из Японии" [ref=e395] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/showcase/tovari-iz-yaponii
+        - generic [ref=e398]:
+          - generic [ref=e399]:
+            - heading "Оплата и комиссии" [level=4] [ref=e400]
+            - list [ref=e402]:
+              - listitem [ref=e403]:
+                - link "Оплаты на ZenMarket" [ref=e404] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/payment.aspx#Оплаты на ZenMarket
+              - listitem [ref=e405]:
+                - link "Сколько заводить на баланс?" [ref=e406] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/payment.aspx#Сколько заводить на баланс?
+              - listitem [ref=e407]:
+                - link "Способы оплаты" [ref=e408] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/payment.aspx#Способы оплаты
+              - listitem [ref=e409]:
+                - link "Валюта при оплате" [ref=e410] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/payment.aspx#Валюта при оплате
+              - listitem [ref=e411]:
+                - link "Обработка платежей" [ref=e412] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/payment.aspx#Обработка платежей
+              - listitem [ref=e413]:
+                - link "Покупки в кредит" [ref=e414] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/payment.aspx#buying_on_credit
+              - listitem [ref=e415]:
+                - link "Как использовать код купона?" [ref=e416] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/payment.aspx#how_to_use_coupon_code
+              - listitem [ref=e417]:
+                - link "Обзор затрат" [ref=e418] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/fees.aspx#Обзор затрат
+              - listitem [ref=e419]:
+                - link "Комиссия ZenMarket" [ref=e420] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/fees.aspx#Комиссия ZenMarket
+              - listitem [ref=e421]:
+                - link "Комиссии платёжных систем" [ref=e422] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/fees.aspx#Комиссии платёжных систем
+              - listitem [ref=e423]:
+                - link "Опциональные комиссии" [ref=e424] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/fees.aspx#Опциональные комиссии
+              - listitem [ref=e425]:
+                - link "Комиссии за отмены" [ref=e426] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/fees.aspx#Комиссии за отмены
+          - generic [ref=e427]:
+            - heading "Доставка" [level=4] [ref=e428]
+            - list [ref=e430]:
+              - listitem [ref=e431]:
+                - link "Способы доставки" [ref=e432] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/shipping.aspx#Способы доставки
+              - listitem [ref=e433]:
+                - link "Тарифы на доставку" [ref=e434] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/shipping.aspx#Тарифы на доставку
+              - listitem [ref=e435]:
+                - link "Ограничения по размеру/весу" [ref=e436] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/shipping.aspx#Ограничения по размеру/весу
+              - listitem [ref=e437]:
+                - link "Запрещённые товары" [ref=e438] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/shipping.aspx#prohibited_items
+              - listitem [ref=e439]:
+                - link "Таможенные пошлины" [ref=e440] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/https://zenmarket.jp/en/shipping.aspx#Customs%20duties
+              - listitem [ref=e441]:
+                - link "Когда вы отправите товары?" [ref=e442] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/shipping.aspx#Когда вы отправите товары?
+              - listitem [ref=e443]:
+                - link "Проблемы с доставкой" [ref=e444] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/shipping.aspx#delivery_problems
+        - generic [ref=e447]:
+          - generic [ref=e448]:
+            - heading "Помощь" [level=4] [ref=e449]
+            - list [ref=e451]:
+              - listitem [ref=e452]:
+                - link "Японские размеры" [ref=e453] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/sizetable.aspx
+              - listitem [ref=e454]:
+                - link "Примерный вес вещей" [ref=e455] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/weight.aspx
+              - listitem [ref=e456]:
+                - link "Проблемы с доставкой" [ref=e457] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/shipping.aspx#Повреждение или утеря товара при пересылке EMS
+              - listitem [ref=e458]:
+                - link "Проблемы с товаром" [ref=e459] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/shipping.aspx#Неудовлетворительный товар
+          - generic [ref=e460]:
+            - heading "Мы в социальных сетях" [level=4] [ref=e461]
+            - list [ref=e462]:
+              - listitem [ref=e463]:
+                - link "Instagram" [ref=e464] [cursor=pointer]:
+                  - /url: https://www.instagram.com/zenmarket_ru/
+                  - generic [ref=e465]: Instagram
+              - listitem [ref=e466]:
+                - link "Twitter" [ref=e467] [cursor=pointer]:
+                  - /url: https://twitter.com/zenmarket_ru
+                  - generic [ref=e468]: Twitter
+              - listitem [ref=e469]:
+                - link "Facebook" [ref=e470] [cursor=pointer]:
+                  - /url: https://www.facebook.com/zenmarket.jp
+                  - generic [ref=e471]: Facebook
+              - listitem [ref=e472]:
+                - link "rss" [ref=e473] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/rss.ashx?lang=ru-RU
+                  - generic [ref=e474]: rss
+            - heading "Язык" [level=4] [ref=e476]
+            - list [ref=e478]:
+              - listitem [ref=e479]:
+                - link "English" [ref=e480] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/en/
+              - listitem [ref=e481]:
+                - link "日本語" [ref=e482] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ja/
+              - listitem [ref=e483]:
+                - link "Русский" [ref=e484] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ru/
+              - listitem [ref=e485]:
+                - link "Українська" [ref=e486] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ua/
+              - listitem [ref=e487]:
+                - link "简体中文" [ref=e488] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/cn/
+              - listitem [ref=e489]:
+                - link "繁體中文" [ref=e490] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/tw/
+              - listitem [ref=e491]:
+                - link "Español" [ref=e492] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/es/
+              - listitem [ref=e493]:
+                - link "Français" [ref=e494] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/fr/
+              - listitem [ref=e495]:
+                - link "Bahasa Melayu" [ref=e496] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ms/
+              - listitem [ref=e497]:
+                - link "Tiếng Việt" [ref=e498] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/vi/
+              - listitem [ref=e499]:
+                - link "العربية" [ref=e500] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ar/
+              - listitem [ref=e501]:
+                - link "Deutsch" [ref=e502] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/de/
+              - listitem [ref=e503]:
+                - link "Bahasa Indonesia" [ref=e504] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/id/
+              - listitem [ref=e505]:
+                - link "ภาษาไทย" [ref=e506] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/th/
+              - listitem [ref=e507]:
+                - link "Italiano" [ref=e508] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/it/
+              - listitem [ref=e509]:
+                - link "Português" [ref=e510] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/pt/
+              - listitem [ref=e511]:
+                - link "Türkçe" [ref=e512] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/tr/
+              - listitem [ref=e513]:
+                - link "Polski" [ref=e514] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/pl/
+              - listitem [ref=e515]:
+                - link "한국어" [ref=e516] [cursor=pointer]:
+                  - /url: https://zenmarket.jp/ko/
+      - generic [ref=e518]:
+        - generic [ref=e519]:
+          - text: Copyright © 2026
+          - link "ZenMarket" [ref=e520] [cursor=pointer]:
+            - /url: "#"
+        - generic [ref=e521]:
+          - link:
+            - /url: https://kouaniinkai.pref.osaka.lg.jp/section/info/kobutsu.html
+  - generic:  
