@@ -26,10 +26,16 @@ services:
     environment:
       - LOCAL_BROKER_HOST=mosquitto
       - LOCAL_BROKER_PORT=1883
-      - CLOUD_BROKER_HOST=emqx.cloud.example.com # Replace later
-      - CLOUD_BROKER_PORT=8883
+      # Local integration default: publish uplink/downlink against local broker.
+      # Override these to your real EMQX host/port for cloud runs.
+      - CLOUD_BROKER_HOST=mosquitto
+      - CLOUD_BROKER_PORT=1883
       - CLOUD_USERNAME=edge_gateway_1
       - CLOUD_PASSWORD=secret_cert_or_pass
+      - TENANT_ID=tenant-demo
+      - GREENHOUSE_ID=greenhouse-demo
+      - GATEWAY_ID=greenhouse-demo
+      - CONFIG_REHYDRATE_COOLDOWN_SEC=45
 
   simulator_hw:
     profiles: ["simulator"]
@@ -37,7 +43,6 @@ services:
       context: ./simulator-hw
       dockerfile: Dockerfile
     container_name: gms_simulator_hw
-    user: "1000:1000"
     working_dir: /app
     command: sh -lc "bun install --ignore-scripts && bun run dev --host 0.0.0.0 --port 4173"
     depends_on:
@@ -49,8 +54,7 @@ services:
       - PORT=4173
       - MQTT_HOST=mosquitto
       - MQTT_PORT=1883
-      - TELEMETRY_TOPIC=telemetry/zone1
-      - COMMAND_TOPIC=commands/zone1/output
+      - GREENHOUSE_ID=greenhouse-demo
       - PUBLISH_INTERVAL_MS=10000
       - AUTO_CONNECT=true
       - SIM_DATA_DIR=/app/sim-data

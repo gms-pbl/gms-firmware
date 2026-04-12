@@ -1,183 +1,758 @@
-import os
-import time
 import json
+import os
 import sqlite3
 import threading
+import time
+import uuid
+
 import paho.mqtt.client as mqtt
 
-# Local Mosquitto Broker
+
 LOCAL_HOST = os.environ.get("LOCAL_BROKER_HOST", "mosquitto")
 LOCAL_PORT = int(os.environ.get("LOCAL_BROKER_PORT", 1883))
 
-# Cloud EMQX Broker
 CLOUD_HOST = os.environ.get("CLOUD_BROKER_HOST", "emqx.cloud.example.com")
 CLOUD_PORT = int(os.environ.get("CLOUD_BROKER_PORT", 1883))
 CLOUD_USER = os.environ.get("CLOUD_USERNAME", "edge_gateway_1")
 CLOUD_PASS = os.environ.get("CLOUD_PASSWORD", "secret")
 
-# State
+TENANT_ID = os.environ.get("TENANT_ID", "tenant-demo")
+GREENHOUSE_ID = os.environ.get("GREENHOUSE_ID", "greenhouse-demo")
+GATEWAY_ID = os.environ.get("GATEWAY_ID", GREENHOUSE_ID)
+
+SNAPSHOT_INTERVAL_SEC = int(os.environ.get("SNAPSHOT_INTERVAL_SEC", 60))
+BUFFER_FLUSH_BATCH = int(os.environ.get("BUFFER_FLUSH_BATCH", 100))
+BUFFER_FLUSH_INTERVAL_SEC = int(os.environ.get("BUFFER_FLUSH_INTERVAL_SEC", 5))
+STATUS_HEARTBEAT_SEC = int(os.environ.get("STATUS_HEARTBEAT_SEC", 30))
+DEFAULT_DELTA_THRESHOLD = float(os.environ.get("DELTA_THRESHOLD", 0.1))
+CONFIG_REHYDRATE_COOLDOWN_SEC = int(os.environ.get("CONFIG_REHYDRATE_COOLDOWN_SEC", 45))
+
+DB_PATH = os.environ.get("EDGE_DB_PATH", "/app/data/offline_buffer.db")
+
+
 cloud_connected = False
 db_conn = None
 
+zone_registry = {}
+last_metrics = {}
+last_snapshot_at = {}
+last_irrigation_state = {}
+last_rehydrate_at = {}
+
+lock = threading.Lock()
+
+UNSET = object()
+
+
+def now_iso():
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def uuid_str():
+    return str(uuid.uuid4())
+
+
+def uplink_topic(stream):
+    return f"gms/{TENANT_ID}/{GREENHOUSE_ID}/uplink/{stream}"
+
+
+def downlink_topic(stream):
+    return f"gms/{TENANT_ID}/{GREENHOUSE_ID}/downlink/{stream}"
+
+
+def local_zone_topic(device_id, stream):
+    return f"edge/{GREENHOUSE_ID}/zone/{device_id}/{stream}"
+
+
+def parse_local_topic(topic):
+    parts = topic.split("/")
+    if len(parts) < 6:
+        return None
+    if parts[0] != "edge" or parts[2] != "zone":
+        return None
+
+    greenhouse_id = parts[1]
+    device_id = parts[3]
+    stream = "/".join(parts[4:])
+    return greenhouse_id, device_id, stream
+
+
 def init_db():
-    os.makedirs("/app/data", exist_ok=True)
-    db_path = "/app/data/offline_buffer.db"
-    conn = sqlite3.connect(db_path, check_same_thread=False)
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS telemetry
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT, topic TEXT, payload TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS outbound_buffer (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            topic TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS zone_registry (
+            device_id TEXT PRIMARY KEY,
+            zone_id TEXT,
+            zone_name TEXT,
+            metadata_json TEXT,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
     conn.commit()
-    print(f"[DB] Initialized at {db_path}", flush=True)
+    print(f"[DB] Initialized at {DB_PATH}", flush=True)
     return conn
 
-def evaluate_safety_rules(payload_str):
-    try:
-        data = json.loads(payload_str)
-        # Hysteresis safety logic:
-        # If soil moisture < 20%, turn on irrigation (Channel 1)
-        # If > 40%, turn off irrigation
-        soil_moisture = data.get("soil_moist")
-        
-        if soil_moisture is not None:
-            if soil_moisture < 20.0:
-                print("[SAFETY] Soil moisture critically low. Triggering Irrigation (ON).", flush=True)
-                cmd = json.dumps({"channel": 1, "state": 1})
-                local_client.publish("commands/zone1/output", cmd)
-            elif soil_moisture > 40.0:
-                print("[SAFETY] Soil moisture recovered. Triggering Irrigation (OFF).", flush=True)
-                cmd = json.dumps({"channel": 1, "state": 0})
-                local_client.publish("commands/zone1/output", cmd)
-                
-    except Exception as e:
-        pass
+
+def load_zone_registry_cache():
+    with lock:
+        zone_registry.clear()
+        rows = db_conn.execute(
+            "SELECT device_id, zone_id, zone_name, metadata_json FROM zone_registry"
+        ).fetchall()
+
+    for device_id, zone_id, zone_name, metadata_json in rows:
+        metadata = {}
+        if metadata_json:
+            try:
+                metadata = json.loads(metadata_json)
+            except Exception:
+                metadata = {}
+
+        zone_registry[device_id] = {
+            "zone_id": zone_id,
+            "zone_name": zone_name,
+            "metadata": metadata,
+        }
+
+    print(f"[REGISTRY] Loaded {len(zone_registry)} cached zone assignments.", flush=True)
+
+
+def save_zone_registry(device_id, zone_id, zone_name, metadata):
+    metadata_json = json.dumps(metadata or {})
+    with lock:
+        db_conn.execute(
+            """
+            INSERT INTO zone_registry(device_id, zone_id, zone_name, metadata_json, updated_at)
+            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(device_id) DO UPDATE SET
+                zone_id = excluded.zone_id,
+                zone_name = excluded.zone_name,
+                metadata_json = excluded.metadata_json,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (device_id, zone_id, zone_name, metadata_json),
+        )
+        db_conn.commit()
+
+    zone_registry[device_id] = {
+        "zone_id": zone_id,
+        "zone_name": zone_name,
+        "metadata": metadata or {},
+    }
+
+
+def remove_zone_registry(device_id):
+    with lock:
+        db_conn.execute("DELETE FROM zone_registry WHERE device_id = ?", (device_id,))
+        db_conn.commit()
+
+    zone_registry.pop(device_id, None)
+    last_rehydrate_at.pop(device_id, None)
+
+
+def resolve_zone(device_id):
+    config = zone_registry.get(device_id)
+    if not config:
+        return device_id, None
+
+    zone_id = config.get("zone_id") or device_id
+    zone_name = config.get("zone_name")
+    return zone_id, zone_name
+
+
+def normalize_zone_field(value):
+    if not isinstance(value, str):
+        return None
+
+    normalized = value.strip()
+    if not normalized:
+        return None
+
+    return normalized
+
+
+def normalize_metrics(payload_dict):
+    metrics = {}
+    for key, value in payload_dict.items():
+        if isinstance(value, bool):
+            metrics[key] = 1.0 if value else 0.0
+            continue
+
+        if isinstance(value, (int, float)):
+            metrics[key] = float(value)
+            continue
+
+        try:
+            casted = float(value)
+            metrics[key] = casted
+        except Exception:
+            continue
+    return metrics
+
+
+def metric_threshold(metric_name):
+    if metric_name.startswith("din_") or metric_name.startswith("dout_"):
+        return 1.0
+    return DEFAULT_DELTA_THRESHOLD
+
+
+def compute_delta(device_id, metrics):
+    previous = last_metrics.get(device_id, {})
+    changed = {}
+
+    for key, value in metrics.items():
+        if key not in previous:
+            changed[key] = value
+            continue
+
+        if abs(value - previous[key]) >= metric_threshold(key):
+            changed[key] = value
+
+    last_metrics[device_id] = metrics
+    return changed
+
+
+def publish_or_buffer(topic, payload_dict):
+    payload_text = json.dumps(payload_dict)
+
+    if cloud_connected:
+        cloud_client.publish(topic, payload_text)
+        return
+
+    with lock:
+        db_conn.execute(
+            "INSERT INTO outbound_buffer(topic, payload) VALUES (?, ?)",
+            (topic, payload_text),
+        )
+        db_conn.commit()
+
 
 def flush_offline_buffer():
-    global cloud_connected
     if not cloud_connected:
         return
-        
+
+    with lock:
+        rows = db_conn.execute(
+            "SELECT id, topic, payload FROM outbound_buffer ORDER BY id ASC LIMIT ?",
+            (BUFFER_FLUSH_BATCH,),
+        ).fetchall()
+
+    if not rows:
+        return
+
+    for row_id, topic, payload in rows:
+        cloud_client.publish(topic, payload)
+        with lock:
+            db_conn.execute("DELETE FROM outbound_buffer WHERE id = ?", (row_id,))
+
+    with lock:
+        db_conn.commit()
+
+    print(f"[CLOUD] Flushed {len(rows)} buffered uplink messages.", flush=True)
+
+
+def publish_registry_event(
+    event_type,
+    device_id,
+    firmware_version=None,
+    metadata=None,
+    command_id=None,
+    zone_id=UNSET,
+    zone_name=UNSET,
+):
+    resolved_zone_id, resolved_zone_name = resolve_zone(device_id)
+    effective_zone_id = resolved_zone_id if zone_id is UNSET else zone_id
+    effective_zone_name = resolved_zone_name if zone_name is UNSET else zone_name
+
+    payload = {
+        "event_id": uuid_str(),
+        "type": event_type,
+        "tenant_id": TENANT_ID,
+        "greenhouse_id": GREENHOUSE_ID,
+        "gateway_id": GATEWAY_ID,
+        "device_id": device_id,
+        "zone_id": effective_zone_id,
+        "zone_name": effective_zone_name,
+        "firmware_version": firmware_version,
+        "timestamp": now_iso(),
+        "metadata": metadata or {},
+    }
+    if command_id:
+        payload["command_id"] = command_id
+    publish_or_buffer(uplink_topic("registry"), payload)
+
+
+def publish_gateway_status(state):
+    payload = {
+        "event_id": uuid_str(),
+        "type": "GATEWAY_STATUS",
+        "tenant_id": TENANT_ID,
+        "greenhouse_id": GREENHOUSE_ID,
+        "gateway_id": GATEWAY_ID,
+        "status": state,
+        "timestamp": now_iso(),
+    }
+    publish_or_buffer(uplink_topic("status"), payload)
+
+
+def publish_command_ack(status, command_id, device_id=None, zone_id=None, reason=None):
+    payload = {
+        "event_id": uuid_str(),
+        "type": "COMMAND_ACK",
+        "tenant_id": TENANT_ID,
+        "greenhouse_id": GREENHOUSE_ID,
+        "gateway_id": GATEWAY_ID,
+        "command_id": command_id,
+        "device_id": device_id,
+        "zone_id": zone_id,
+        "status": status,
+        "reason": reason,
+        "timestamp": now_iso(),
+    }
+    publish_or_buffer(uplink_topic("command_ack"), payload)
+
+
+def publish_zone_config(device_id, zone_id=None, zone_name=None):
+    payload = {
+        "zone_id": zone_id,
+        "zone_name": zone_name,
+        "ts": now_iso(),
+    }
+    local_client.publish(local_zone_topic(device_id, "config"), json.dumps(payload))
+
+
+def evaluate_local_safety_rules(device_id, metrics):
+    soil_moisture = metrics.get("soil_moist")
+    if soil_moisture is None:
+        return
+
+    previous_state = last_irrigation_state.get(device_id)
+    desired_state = None
+    if soil_moisture < 20.0:
+        desired_state = 1
+    elif soil_moisture > 40.0:
+        desired_state = 0
+
+    if desired_state is None or desired_state == previous_state:
+        return
+
+    command = {
+        "channel": 1,
+        "state": desired_state,
+        "source": "edge_safety_rule",
+        "ts": now_iso(),
+    }
+    local_client.publish(local_zone_topic(device_id, "command/output"), json.dumps(command))
+    last_irrigation_state[device_id] = desired_state
+    print(
+        f"[SAFETY] device={device_id} soil_moist={soil_moisture:.2f} -> irrigation={desired_state}",
+        flush=True,
+    )
+
+
+def handle_local_announce(device_id, payload_text):
+    metadata = {}
+    firmware_version = None
+    event_type = "DEVICE_DISCOVERED"
+    announced_zone_id = None
+    announced_zone_name = None
+
     try:
-        c = db_conn.cursor()
-        c.execute("SELECT id, topic, payload FROM telemetry ORDER BY id ASC LIMIT 50")
-        rows = c.fetchall()
-        
-        if not rows:
+        body = json.loads(payload_text)
+        if isinstance(body, dict):
+            firmware_version = body.get("firmware_version")
+            announced_zone_id = normalize_zone_field(body.get("zone_id"))
+            announced_zone_name = normalize_zone_field(body.get("zone_name"))
+            metadata = body.get("metadata", {})
+            if not isinstance(metadata, dict):
+                metadata = {}
+            if announced_zone_id is None:
+                announced_zone_id = normalize_zone_field(metadata.get("zone_id"))
+            if announced_zone_name is None:
+                announced_zone_name = normalize_zone_field(metadata.get("zone_name"))
+            incoming_type = body.get("type")
+            if isinstance(incoming_type, str) and incoming_type.strip():
+                event_type = incoming_type.strip().upper()
+    except Exception:
+        metadata = {}
+
+    if event_type in {"DEVICE_REMOVED", "DEVICE_DECOMMISSIONED"}:
+        remove_zone_registry(device_id)
+        last_metrics.pop(device_id, None)
+        last_snapshot_at.pop(device_id, None)
+        last_irrigation_state.pop(device_id, None)
+        publish_registry_event(
+            "DEVICE_DECOMMISSIONED",
+            device_id,
+            firmware_version=firmware_version,
+            metadata=metadata,
+            zone_id=None,
+            zone_name=None,
+        )
+        return
+
+    publish_registry_event("DEVICE_DISCOVERED", device_id, firmware_version, metadata)
+
+    cached_assignment = zone_registry.get(device_id)
+    if cached_assignment:
+        cached_zone_id = normalize_zone_field(cached_assignment.get("zone_id"))
+        cached_zone_name = normalize_zone_field(cached_assignment.get("zone_name"))
+
+        if announced_zone_id == cached_zone_id and announced_zone_name == cached_zone_name:
             return
 
-        print(f"[CLOUD] Flushing {len(rows)} buffered records...", flush=True)
-        for row_id, topic, payload in rows:
-            # Forward to cloud
-            cloud_client.publish(f"cloud/{topic}", payload)
-            # Delete from buffer
-            c.execute("DELETE FROM telemetry WHERE id = ?", (row_id,))
-            
-        db_conn.commit()
-    except Exception as e:
-        print(f"[CLOUD] Flush error: {e}", flush=True)
+        now_ts = time.time()
+        previous_rehydrate = last_rehydrate_at.get(device_id, 0.0)
+        if now_ts - previous_rehydrate < CONFIG_REHYDRATE_COOLDOWN_SEC:
+            return
 
-# --- LOCAL CLIENT CALLBACKS ---
+        publish_zone_config(device_id, cached_zone_id, cached_zone_name)
+        last_rehydrate_at[device_id] = now_ts
+        print(
+            f"[REGISTRY] Rehydrated config for device={device_id} zone_id={cached_zone_id} zone_name={cached_zone_name}",
+            flush=True,
+        )
+
+
+def handle_local_telemetry(device_id, payload_text):
+    try:
+        raw = json.loads(payload_text)
+    except Exception:
+        print(f"[LOCAL] Invalid telemetry JSON from {device_id}: {payload_text}", flush=True)
+        return
+
+    if not isinstance(raw, dict):
+        return
+
+    metrics = normalize_metrics(raw)
+    if not metrics:
+        return
+
+    evaluate_local_safety_rules(device_id, metrics)
+    changed = compute_delta(device_id, metrics)
+
+    zone_id, zone_name = resolve_zone(device_id)
+    base_payload = {
+        "tenant_id": TENANT_ID,
+        "greenhouse_id": GREENHOUSE_ID,
+        "gateway_id": GATEWAY_ID,
+        "device_id": device_id,
+        "zone_id": zone_id,
+        "zone_name": zone_name,
+        "timestamp": now_iso(),
+    }
+
+    if changed:
+        payload = dict(base_payload)
+        payload.update(
+            {
+                "event_id": uuid_str(),
+                "kind": "delta",
+                "metrics": changed,
+            }
+        )
+        publish_or_buffer(uplink_topic("telemetry"), payload)
+
+    now_ts = time.time()
+    if now_ts - last_snapshot_at.get(device_id, 0.0) >= SNAPSHOT_INTERVAL_SEC:
+        payload = dict(base_payload)
+        payload.update(
+            {
+                "event_id": uuid_str(),
+                "kind": "snapshot",
+                "metrics": metrics,
+            }
+        )
+        publish_or_buffer(uplink_topic("telemetry"), payload)
+        last_snapshot_at[device_id] = now_ts
+
+
+def resolve_target_device(command):
+    device_id = command.get("device_id")
+    if device_id:
+        return device_id
+
+    zone_id = command.get("zone_id")
+    if not zone_id:
+        return None
+
+    for current_device_id, config in zone_registry.items():
+        if config.get("zone_id") == zone_id:
+            return current_device_id
+    return None
+
+
+def translate_command(command):
+    payload = command.get("payload", {})
+    if not isinstance(payload, dict):
+        payload = {}
+
+    if "channel" in payload and "state" in payload:
+        try:
+            return {
+                "channel": int(payload.get("channel")),
+                "state": 1 if int(payload.get("state")) else 0,
+                "command_id": command.get("command_id"),
+            }
+        except Exception:
+            return None
+
+    command_type = (command.get("type") or "").upper()
+    if command_type == "IRRIGATION_ON":
+        return {"channel": 1, "state": 1, "command_id": command.get("command_id")}
+    if command_type == "IRRIGATION_OFF":
+        return {"channel": 1, "state": 0, "command_id": command.get("command_id")}
+
+    return None
+
+
+def handle_downlink_registry(payload):
+    command_id = payload.get("command_id") or uuid_str()
+    command_type = (payload.get("type") or "").upper()
+    device_id = payload.get("device_id")
+
+    if command_type == "ZONE_REGISTRY_SYNC":
+        zones = payload.get("zones")
+        if not isinstance(zones, list):
+            publish_command_ack("FAILED", command_id, reason="Invalid or missing zones list")
+            return
+
+        assigned_devices = set()
+
+        for zone in zones:
+            if not isinstance(zone, dict):
+                continue
+
+            synced_device_id = zone.get("device_id")
+            if not synced_device_id:
+                continue
+
+            zone_id = zone.get("zone_id") or uuid_str()
+            zone_name = zone.get("zone_name") or f"zone-{zone_id[:8]}"
+            metadata = zone.get("metadata") if isinstance(zone.get("metadata"), dict) else {}
+
+            save_zone_registry(synced_device_id, zone_id, zone_name, metadata)
+            publish_zone_config(synced_device_id, zone_id, zone_name)
+            publish_registry_event(
+                "ZONE_ASSIGNMENT_APPLIED",
+                synced_device_id,
+                metadata=metadata,
+                command_id=command_id,
+                zone_id=zone_id,
+                zone_name=zone_name,
+            )
+            assigned_devices.add(synced_device_id)
+
+        for existing_device_id in list(zone_registry.keys()):
+            if existing_device_id in assigned_devices:
+                continue
+
+            remove_zone_registry(existing_device_id)
+            publish_zone_config(existing_device_id)
+            publish_registry_event(
+                "ZONE_UNASSIGNED_APPLIED",
+                existing_device_id,
+                command_id=command_id,
+                zone_id=None,
+                zone_name=None,
+            )
+
+        publish_command_ack(
+            "APPLIED",
+            command_id,
+            reason=f"Applied registry sync for {len(assigned_devices)} zones",
+        )
+        return
+
+    if not device_id:
+        publish_command_ack("FAILED", command_id, reason="Missing device_id for registry command")
+        return
+
+    if command_type == "ASSIGN_ZONE":
+        zone_id = payload.get("zone_id") or uuid_str()
+        zone_name = payload.get("zone_name") or f"zone-{zone_id[:8]}"
+        metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+
+        save_zone_registry(device_id, zone_id, zone_name, metadata)
+        publish_zone_config(device_id, zone_id, zone_name)
+
+        publish_registry_event(
+            "ZONE_ASSIGNMENT_APPLIED",
+            device_id,
+            metadata=metadata,
+            command_id=command_id,
+            zone_id=zone_id,
+            zone_name=zone_name,
+        )
+        publish_command_ack("APPLIED", command_id, device_id=device_id, zone_id=zone_id)
+        return
+
+    if command_type == "UNASSIGN_ZONE":
+        remove_zone_registry(device_id)
+        publish_zone_config(device_id)
+        publish_registry_event(
+            "ZONE_UNASSIGNED_APPLIED",
+            device_id,
+            command_id=command_id,
+            zone_id=None,
+            zone_name=None,
+        )
+        publish_command_ack("APPLIED", command_id, device_id=device_id)
+        return
+
+    publish_command_ack("FAILED", command_id, device_id=device_id, reason=f"Unknown registry command type: {command_type}")
+
+
+def handle_downlink_command(payload):
+    command_id = payload.get("command_id") or uuid_str()
+    device_id = resolve_target_device(payload)
+
+    if not device_id:
+        publish_command_ack("FAILED", command_id, reason="Unable to resolve target device")
+        return
+
+    translated = translate_command(payload)
+    if translated is None:
+        publish_command_ack("FAILED", command_id, device_id=device_id, reason="Unsupported command payload")
+        return
+
+    local_client.publish(local_zone_topic(device_id, "command/output"), json.dumps(translated))
+    zone_id, _ = resolve_zone(device_id)
+    publish_command_ack("FORWARDED", command_id, device_id=device_id, zone_id=zone_id)
+
+
 def on_local_connect(client, userdata, flags, rc):
-    if rc == 0:
-        print("[LOCAL] Connected successfully.", flush=True)
-        client.subscribe("telemetry/#")
-    else:
+    if rc != 0:
         print(f"[LOCAL] Connect failed (RC {rc})", flush=True)
+        return
+
+    print("[LOCAL] Connected successfully.", flush=True)
+    client.subscribe(local_zone_topic("+", "registry/announce"))
+    client.subscribe(local_zone_topic("+", "telemetry/raw"))
+
 
 def on_local_message(client, userdata, msg):
-    payload = msg.payload.decode()
-    topic = msg.topic
-    print(f"[LOCAL] Received: {topic} -> {payload}", flush=True)
-    
-    # 1. Evaluate Local Safety Rules (Hysteresis)
-    evaluate_safety_rules(payload)
-    
-    # 2. Forward or Buffer Data
-    if cloud_connected:
-        cloud_client.publish(f"cloud/{topic}", payload)
-        print(f"[CLOUD] Forwarded: cloud/{topic}", flush=True)
-    else:
-        try:
-            c = db_conn.cursor()
-            c.execute("INSERT INTO telemetry (topic, payload) VALUES (?, ?)", (topic, payload))
-            db_conn.commit()
-            print(f"[DB] Buffered: {topic}", flush=True)
-        except Exception as e:
-            print(f"[DB] Insert failed: {e}", flush=True)
+    parsed = parse_local_topic(msg.topic)
+    if not parsed:
+        return
 
-# --- CLOUD CLIENT CALLBACKS ---
+    greenhouse_id, device_id, stream = parsed
+    if greenhouse_id != GREENHOUSE_ID:
+        return
+
+    payload = msg.payload.decode()
+
+    if stream == "registry/announce":
+        handle_local_announce(device_id, payload)
+        return
+
+    if stream == "telemetry/raw":
+        handle_local_telemetry(device_id, payload)
+        return
+
+
 def on_cloud_connect(client, userdata, flags, rc):
     global cloud_connected
-    if rc == 0:
-        print("[CLOUD] Connected successfully.", flush=True)
-        cloud_connected = True
-        # Subscribe to cloud commands destined for this edge
-        client.subscribe("cloud/commands/#")
-        # Trigger an immediate buffer flush
-        flush_offline_buffer()
-    else:
+
+    if rc != 0:
         print(f"[CLOUD] Connect failed (RC {rc})", flush=True)
+        cloud_connected = False
+        return
+
+    cloud_connected = True
+    client.subscribe(downlink_topic("#"))
+    print("[CLOUD] Connected successfully.", flush=True)
+    publish_gateway_status("ONLINE")
+    flush_offline_buffer()
+
 
 def on_cloud_disconnect(client, userdata, rc):
     global cloud_connected
     cloud_connected = False
-    print("[CLOUD] Disconnected. Switching to offline buffer mode.", flush=True)
+    print("[CLOUD] Disconnected, switching to offline buffering.", flush=True)
+
 
 def on_cloud_message(client, userdata, msg):
-    payload = msg.payload.decode()
     topic = msg.topic
-    print(f"[CLOUD] Received Command: {topic} -> {payload}", flush=True)
-    
-    # Map cloud/commands/zone1/output -> commands/zone1/output
-    if topic.startswith("cloud/commands/"):
-        local_topic = topic.replace("cloud/commands/", "commands/")
-        local_client.publish(local_topic, payload)
-        print(f"[LOCAL] Forwarded Command: {local_topic}", flush=True)
+    payload_text = msg.payload.decode()
 
-def background_flusher():
+    try:
+        payload = json.loads(payload_text)
+    except Exception:
+        print(f"[CLOUD] Invalid JSON on {topic}: {payload_text}", flush=True)
+        return
+
+    if topic == downlink_topic("registry"):
+        handle_downlink_registry(payload)
+        return
+
+    if topic == downlink_topic("command"):
+        handle_downlink_command(payload)
+        return
+
+
+def buffer_flush_loop():
     while True:
         if cloud_connected:
             flush_offline_buffer()
-        time.sleep(5)
+        time.sleep(BUFFER_FLUSH_INTERVAL_SEC)
+
+
+def heartbeat_loop():
+    while True:
+        publish_gateway_status("ONLINE" if cloud_connected else "OFFLINE")
+        time.sleep(STATUS_HEARTBEAT_SEC)
+
 
 if __name__ == "__main__":
     print("Starting GMS Edge Engine...", flush=True)
-    time.sleep(2)
-    
-    db_conn = init_db()
+    print(
+        f"[CFG] tenant={TENANT_ID} greenhouse={GREENHOUSE_ID} gateway={GATEWAY_ID}",
+        flush=True,
+    )
 
-    # Setup Local Client
-    local_client = mqtt.Client("EdgeEngine_Local")
+    db_conn = init_db()
+    load_zone_registry_cache()
+
+    local_client = mqtt.Client(client_id=f"edge-local-{GATEWAY_ID}")
     local_client.on_connect = on_local_connect
     local_client.on_message = on_local_message
-    
-    # Setup Cloud Client
-    cloud_client = mqtt.Client("EdgeEngine_Cloud")
+
+    cloud_client = mqtt.Client(client_id=f"edge-cloud-{GATEWAY_ID}")
     cloud_client.username_pw_set(CLOUD_USER, CLOUD_PASS)
     cloud_client.on_connect = on_cloud_connect
     cloud_client.on_disconnect = on_cloud_disconnect
     cloud_client.on_message = on_cloud_message
 
-    # We will try to connect to cloud, but we don't block if it fails (Offline first!)
-    print(f"[CLOUD] Connecting to {CLOUD_HOST}:{CLOUD_PORT}...", flush=True)
-    try:
-        # Just use connect_async so it retries in background
-        cloud_client.connect_async(CLOUD_HOST, CLOUD_PORT, 60)
-        cloud_client.loop_start()
-    except Exception as e:
-        print(f"[CLOUD] Warning, couldn't initiate cloud connection: {e}", flush=True)
+    cloud_client.connect_async(CLOUD_HOST, CLOUD_PORT, 60)
+    cloud_client.loop_start()
 
-    # Start Flusher Thread
-    flusher = threading.Thread(target=background_flusher, daemon=True)
-    flusher.start()
+    flush_thread = threading.Thread(target=buffer_flush_loop, daemon=True)
+    flush_thread.start()
 
-    # Start Local Client Loop (Blocks main thread)
+    heartbeat_thread = threading.Thread(target=heartbeat_loop, daemon=True)
+    heartbeat_thread.start()
+
     print(f"[LOCAL] Connecting to {LOCAL_HOST}:{LOCAL_PORT}...", flush=True)
     while True:
         try:
             local_client.connect(LOCAL_HOST, LOCAL_PORT, 60)
             break
-        except Exception as e:
-            print(f"[LOCAL] Broker not ready, retrying in 5 seconds... ({e})", flush=True)
+        except Exception as exc:
+            print(f"[LOCAL] Broker not ready, retrying in 5 seconds... ({exc})", flush=True)
             time.sleep(5)
 
     local_client.loop_forever()
