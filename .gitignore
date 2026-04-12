@@ -345,3 +345,8 @@ TSWLatexianTemp*
 **/**/.vscode/
 **/**/.opencode/
 **/**/.playwright-mcp/
+
+# Ignore pycache
+**/**/__pycache__/
+**/**/.pytest_cache/
+**/**/*.pyc
