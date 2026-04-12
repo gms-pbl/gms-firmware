@@ -38,13 +38,11 @@ export interface SimulationState {
 	digital_outputs: DigitalOutputState;
 }
 
-export interface ConnectionConfig {
+export interface BrokerConfig {
 	host: string;
 	port: number;
-	telemetry_topic: string;
-	command_topic: string;
+	greenhouse_id: string;
 	publish_interval_ms: number;
-	client_id: string;
 	username?: string;
 	password?: string;
 	auto_connect: boolean;
@@ -56,10 +54,19 @@ export interface ConnectionStatus {
 	last_connect_at: string | null;
 }
 
-export interface SimulatorRuntime {
-	state: SimulationState;
-	connection: ConnectionConfig;
+export interface SimulatorInstanceSummary {
+	device_id: string;
+	label: string;
+	zone_id: string | null;
+	zone_name: string | null;
 	status: ConnectionStatus;
+}
+
+export interface SimulatorRuntime {
+	state: SimulationState | null;
+	broker: BrokerConfig;
+	active_device_id: string | null;
+	instances: SimulatorInstanceSummary[];
 	profiles: string[];
 	events: string[];
 }
@@ -96,12 +103,10 @@ export const DEFAULT_STATE: SimulationState = {
 	}
 };
 
-export const DEFAULT_CONNECTION: ConnectionConfig = {
+export const DEFAULT_BROKER: BrokerConfig = {
 	host: "127.0.0.1",
 	port: 1883,
-	telemetry_topic: "telemetry/zone1",
-	command_topic: "commands/zone1/output",
+	greenhouse_id: "greenhouse-demo",
 	publish_interval_ms: 10000,
-	client_id: "virtual-portenta-zone1",
 	auto_connect: true
 };
