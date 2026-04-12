@@ -4,8 +4,8 @@ import { simulator } from "$lib/server/simulator";
 export async function POST({ request }) {
 	await simulator.init();
 
-	const payload = (await request.json()) as Record<string, unknown>;
-	await simulator.setBroker(payload as never);
+	const body = (await request.json()) as { label?: string };
+	await simulator.addInstance(body.label);
 
 	const profiles = await simulator.listProfiles();
 	return json(simulator.getRuntime(profiles));

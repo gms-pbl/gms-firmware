@@ -1,16 +1,17 @@
+import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, rm, unlink, writeFile } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import mqtt, { type MqttClient } from "mqtt";
 import {
-	DEFAULT_CONNECTION,
+	DEFAULT_BROKER,
 	DEFAULT_STATE,
 	type BinaryValue,
-	type ConnectionConfig,
+	type BrokerConfig,
 	type ConnectionStatus,
 	type DigitalInputState,
 	type DigitalOutputState,
 	type SimulationState,
+	type SimulatorInstanceSummary,
 	type SimulatorRuntime
 } from "$lib/sim/types";
 
@@ -20,27 +21,43 @@ type StatePatch = Partial<{
 	digital_outputs: Partial<DigitalOutputState>;
 }>;
 
-const EVENT_LIMIT = 120;
-const LEGACY_STATIC_CLIENT_ID = "virtual-portenta-zone1";
+interface VirtualInstance {
+	device_id: string;
+	label: string;
+	zone_id: string | null;
+	zone_name: string | null;
+	state: SimulationState;
+	status: ConnectionStatus;
+	client: MqttClient | null;
+}
+
+interface PersistedInstance {
+	device_id: string;
+	label: string;
+	zone_id?: string | null;
+	zone_name?: string | null;
+	state?: Partial<SimulationState>;
+}
+
+interface PersistedInstancesFile {
+	active_device_id?: string | null;
+	instances?: PersistedInstance[];
+}
+
+const EVENT_LIMIT = 160;
 
 class SimulatorService {
-	private state: SimulationState = structuredClone(DEFAULT_STATE);
-	private connection: ConnectionConfig = this.readConnectionDefaults();
-	private status: ConnectionStatus = {
-		connected: false,
-		last_error: null,
-		last_connect_at: null
-	};
+	private broker: BrokerConfig = this.readBrokerDefaults();
+	private instances = new Map<string, VirtualInstance>();
+	private activeDeviceId: string | null = null;
 	private events: string[] = [];
-	private client: MqttClient | null = null;
-	private publishTimer: ReturnType<typeof setInterval> | null = null;
 	private initialized = false;
-	private readonly generatedClientId = this.generateClientId();
+	private publishTimer: ReturnType<typeof setInterval> | null = null;
 
 	private readonly dataDir = process.env.SIM_DATA_DIR ?? path.resolve(process.cwd(), "sim-data");
 	private readonly profilesDir = path.join(this.dataDir, "profiles");
-	private readonly statePath = path.join(this.dataDir, "current-state.json");
-	private readonly connectionPath = path.join(this.dataDir, "connection.json");
+	private readonly brokerPath = path.join(this.dataDir, "connection.json");
+	private readonly instancesPath = path.join(this.dataDir, "instances.json");
 
 	public async init(): Promise<void> {
 		if (this.initialized) {
@@ -48,22 +65,40 @@ class SimulatorService {
 		}
 
 		await mkdir(this.profilesDir, { recursive: true });
-		await this.loadPersistedConnection();
-		await this.loadPersistedState();
+		await this.loadPersistedBroker();
+		await this.loadPersistedInstances();
+		this.ensureAtLeastOneInstance();
 
 		this.initialized = true;
 		this.log("Simulator initialized.");
 
-		if (this.connection.auto_connect) {
+		if (this.broker.auto_connect) {
 			await this.connect();
+		} else {
+			this.refreshPublishTimer();
 		}
 	}
 
 	public getRuntime(profiles: string[]): SimulatorRuntime {
+		const active = this.getActiveInstance();
+		const instanceSummaries: SimulatorInstanceSummary[] = [...this.instances.values()]
+			.sort((a, b) => a.label.localeCompare(b.label))
+			.map((instance) => ({
+				device_id: instance.device_id,
+				label: instance.label,
+				zone_id: instance.zone_id,
+				zone_name: instance.zone_name,
+				status: { ...instance.status }
+			}));
+
 		return {
-			state: structuredClone(this.state),
-			connection: { ...this.connection, password: this.connection.password ? "********" : "" },
-			status: { ...this.status },
+			state: active ? structuredClone(active.state) : null,
+			broker: {
+				...this.broker,
+				password: this.broker.password ? "********" : ""
+			},
+			active_device_id: this.activeDeviceId,
+			instances: instanceSummaries,
 			profiles,
 			events: [...this.events]
 		};
@@ -77,46 +112,102 @@ class SimulatorService {
 			.sort((a, b) => a.localeCompare(b));
 	}
 
+	public async selectInstance(deviceId: string): Promise<void> {
+		if (!this.instances.has(deviceId)) {
+			throw new Error(`Instance '${deviceId}' was not found.`);
+		}
+		this.activeDeviceId = deviceId;
+		await this.persistInstances();
+		this.log(`Selected instance '${deviceId}'.`);
+	}
+
+	public async addInstance(label?: string): Promise<string> {
+		const deviceId = randomUUID();
+		const next: VirtualInstance = {
+			device_id: deviceId,
+			label: this.makeLabel(label),
+			zone_id: null,
+			zone_name: null,
+			state: structuredClone(DEFAULT_STATE),
+			status: this.disconnectedStatus(),
+			client: null
+		};
+
+		this.instances.set(deviceId, next);
+		this.activeDeviceId = deviceId;
+		await this.persistInstances();
+		this.log(`Added virtual Portenta '${next.label}' (${deviceId}).`);
+
+		if (this.broker.auto_connect) {
+			await this.connectInstance(next);
+		}
+
+		this.refreshPublishTimer();
+		return deviceId;
+	}
+
+	public async removeInstance(deviceId: string): Promise<void> {
+		const instance = this.instances.get(deviceId);
+		if (!instance) {
+			throw new Error(`Instance '${deviceId}' was not found.`);
+		}
+
+		await this.publishRemoval(instance);
+		await this.disconnectInstance(instance, false);
+		this.instances.delete(deviceId);
+
+		if (this.activeDeviceId === deviceId) {
+			const [first] = this.instances.keys();
+			this.activeDeviceId = first ?? null;
+		}
+
+		this.ensureAtLeastOneInstance();
+		await this.persistInstances();
+		this.log(`Removed virtual Portenta '${deviceId}'.`);
+		this.refreshPublishTimer();
+	}
+
 	public async updateState(patch: StatePatch): Promise<void> {
+		const active = this.getRequiredActiveInstance();
+
 		if (patch.sensors) {
 			for (const [key, value] of Object.entries(patch.sensors)) {
-				if (key in this.state.sensors && typeof value === "number" && Number.isFinite(value)) {
-					this.state.sensors[key as keyof SimulationState["sensors"]] = value;
+				if (key in active.state.sensors && typeof value === "number" && Number.isFinite(value)) {
+					active.state.sensors[key as keyof SimulationState["sensors"]] = value;
 				}
 			}
 		}
 
 		if (patch.digital_inputs) {
-			this.applyBinaryPatch(this.state.digital_inputs, patch.digital_inputs);
+			this.applyBinaryPatch(active.state.digital_inputs, patch.digital_inputs);
 		}
 
 		if (patch.digital_outputs) {
-			this.applyBinaryPatch(this.state.digital_outputs, patch.digital_outputs);
+			this.applyBinaryPatch(active.state.digital_outputs, patch.digital_outputs);
 		}
 
-		await this.persistState();
-		this.log("State updated from UI/API.");
+		await this.persistInstances();
+		this.log(`State updated for ${active.device_id}.`);
 	}
 
-	public async setConnection(patch: Partial<ConnectionConfig>): Promise<void> {
+	public async setBroker(patch: Partial<BrokerConfig>): Promise<void> {
 		const next = {
-			...this.connection,
+			...this.broker,
 			...patch
 		};
 
-		next.host = String(next.host || "127.0.0.1").trim();
-		next.telemetry_topic = String(next.telemetry_topic || "telemetry/zone1").trim();
-		next.command_topic = String(next.command_topic || "commands/zone1/output").trim();
-		next.client_id = String(next.client_id || "virtual-portenta-zone1").trim();
-		next.port = this.clampInteger(next.port, 1, 65535, 1883);
-		next.publish_interval_ms = this.clampInteger(next.publish_interval_ms, 200, 3_600_000, 10_000);
+		next.host = String(next.host || DEFAULT_BROKER.host).trim();
+		next.greenhouse_id = String(next.greenhouse_id || DEFAULT_BROKER.greenhouse_id).trim();
+		next.port = this.clampInteger(next.port, 1, 65535, DEFAULT_BROKER.port);
+		next.publish_interval_ms = this.clampInteger(next.publish_interval_ms, 200, 3_600_000, DEFAULT_BROKER.publish_interval_ms);
 		next.auto_connect = Boolean(next.auto_connect);
 
-		this.connection = next;
-		await this.persistConnection();
-		this.log("Connection settings updated.");
+		const shouldReconnect = this.hasConnectedInstances();
+		this.broker = next;
+		await this.persistBroker();
+		this.log("Broker settings updated.");
 
-		if (this.status.connected) {
+		if (shouldReconnect || this.broker.auto_connect) {
 			await this.connect();
 		} else {
 			this.refreshPublishTimer();
@@ -124,128 +215,40 @@ class SimulatorService {
 	}
 
 	public async connect(): Promise<void> {
-		await this.disconnect(false);
-
-		const url = `mqtt://${this.connection.host}:${this.connection.port}`;
-		this.log(`Connecting to ${url} ...`);
-
-		this.client = mqtt.connect(url, {
-			clientId: this.connection.client_id,
-			username: this.connection.username || undefined,
-			password: this.connection.password || undefined,
-			reconnectPeriod: 3000,
-			connectTimeout: 5000,
-			clean: true
-		});
-
-		this.client.on("connect", () => {
-			this.status.connected = true;
-			this.status.last_error = null;
-			this.status.last_connect_at = new Date().toISOString();
-			this.log("MQTT connected.");
-
-			if (this.client) {
-				this.client.subscribe(this.connection.command_topic, (error) => {
-					if (error) {
-						this.log(`Subscribe failed: ${error.message}`);
-						return;
-					}
-					this.log(`Subscribed to ${this.connection.command_topic}`);
-				});
-			}
-
-			this.refreshPublishTimer();
-			void this.publishTelemetry();
-		});
-
-		this.client.on("message", async (topic, payload) => {
-			if (topic !== this.connection.command_topic) {
-				return;
-			}
-
-			const text = payload.toString();
-			this.log(`MQTT command <- ${text}`);
-
-			try {
-				const body = JSON.parse(text) as { channel?: number; state?: number };
-				if (
-					typeof body.channel !== "number" ||
-					!Number.isInteger(body.channel) ||
-					body.channel < 0 ||
-					body.channel > 7
-				) {
-					throw new Error("Invalid channel");
-				}
-
-				const key = this.outputKeyFromChannel(body.channel);
-				if (!key) {
-					throw new Error("Unknown output channel");
-				}
-
-				this.state.digital_outputs[key] = this.normalizeBinary(body.state);
-				await this.persistState();
-				this.log(`Applied output command: ${key}=${this.state.digital_outputs[key]}`);
-			} catch (error) {
-				this.log(`Command parse error: ${error instanceof Error ? error.message : String(error)}`);
-			}
-		});
-
-		this.client.on("error", (error) => {
-			this.status.last_error = error.message;
-			this.log(`MQTT error: ${error.message}`);
-		});
-
-		this.client.on("reconnect", () => {
-			this.log("MQTT reconnecting...");
-		});
-
-		this.client.on("offline", () => {
-			this.log("MQTT offline.");
-		});
-
-		this.client.on("end", () => {
-			this.log("MQTT client ended.");
-		});
-
-		this.client.on("close", () => {
-			this.status.connected = false;
-			this.log("MQTT disconnected.");
-			this.refreshPublishTimer();
-		});
+		for (const instance of this.instances.values()) {
+			await this.connectInstance(instance);
+		}
+		this.refreshPublishTimer();
 	}
 
 	public async disconnect(logMessage = true): Promise<void> {
-		if (this.client) {
-			await new Promise<void>((resolve) => {
-				this.client?.end(true, {}, () => resolve());
-			});
-			this.client = null;
+		for (const instance of this.instances.values()) {
+			await this.disconnectInstance(instance, false);
 		}
-
-		this.status.connected = false;
-		this.refreshPublishTimer();
-
 		if (logMessage) {
-			this.log("Disconnected by user.");
+			this.log("Disconnected all instances by user.");
 		}
+		this.refreshPublishTimer();
 	}
 
 	public async saveProfile(name: string): Promise<void> {
+		const active = this.getRequiredActiveInstance();
 		const safeName = this.sanitizeProfileName(name);
 		const targetPath = path.join(this.profilesDir, `${safeName}.json`);
-		await writeFile(targetPath, JSON.stringify(this.state, null, 2), "utf8");
-		this.log(`Saved profile '${safeName}'.`);
+		await writeFile(targetPath, JSON.stringify(active.state, null, 2), "utf8");
+		this.log(`Saved profile '${safeName}' for ${active.device_id}.`);
 	}
 
 	public async loadProfile(name: string): Promise<void> {
+		const active = this.getRequiredActiveInstance();
 		const safeName = this.sanitizeProfileName(name);
 		const targetPath = path.join(this.profilesDir, `${safeName}.json`);
 		const data = await readFile(targetPath, "utf8");
 		const parsed = JSON.parse(data) as SimulationState;
 
-		this.state = this.mergeState(DEFAULT_STATE, parsed);
-		await this.persistState();
-		this.log(`Loaded profile '${safeName}'.`);
+		active.state = this.mergeState(DEFAULT_STATE, parsed);
+		await this.persistInstances();
+		this.log(`Loaded profile '${safeName}' into ${active.device_id}.`);
 	}
 
 	public async deleteProfile(name: string): Promise<void> {
@@ -266,9 +269,121 @@ class SimulatorService {
 	}
 
 	public async resetState(): Promise<void> {
-		this.state = structuredClone(DEFAULT_STATE);
-		await this.persistState();
-		this.log("State reset to defaults.");
+		const active = this.getRequiredActiveInstance();
+		active.state = structuredClone(DEFAULT_STATE);
+		await this.persistInstances();
+		this.log(`State reset for ${active.device_id}.`);
+	}
+
+	private async connectInstance(instance: VirtualInstance): Promise<void> {
+		await this.disconnectInstance(instance, false);
+
+		const url = `mqtt://${this.broker.host}:${this.broker.port}`;
+		const clientId = `virtual-portenta-${instance.device_id.slice(0, 8)}`;
+		instance.client = mqtt.connect(url, {
+			clientId,
+			username: this.broker.username || undefined,
+			password: this.broker.password || undefined,
+			reconnectPeriod: 3000,
+			connectTimeout: 5000,
+			clean: true
+		});
+
+		instance.client.on("connect", () => {
+			instance.status.connected = true;
+			instance.status.last_error = null;
+			instance.status.last_connect_at = new Date().toISOString();
+			this.log(`MQTT connected (${instance.device_id}).`);
+
+			if (!instance.client) {
+				return;
+			}
+
+			const commandTopic = this.commandTopic(instance.device_id);
+			const configTopic = this.configTopic(instance.device_id);
+
+			instance.client.subscribe(commandTopic, (error) => {
+				if (error) {
+					this.log(`Subscribe failed (${instance.device_id}): ${error.message}`);
+					return;
+				}
+				this.log(`Subscribed ${instance.device_id} -> ${commandTopic}`);
+			});
+
+			instance.client.subscribe(configTopic, (error) => {
+				if (error) {
+					this.log(`Subscribe failed (${instance.device_id}): ${error.message}`);
+					return;
+				}
+				this.log(`Subscribed ${instance.device_id} -> ${configTopic}`);
+			});
+
+			void this.publishAnnounce(instance);
+			void this.publishTelemetry(instance);
+			this.refreshPublishTimer();
+		});
+
+		instance.client.on("message", async (topic, payload) => {
+			const text = payload.toString();
+
+			if (topic === this.commandTopic(instance.device_id)) {
+				try {
+					const body = JSON.parse(text) as { channel?: number; state?: number };
+					if (typeof body.channel !== "number" || !Number.isInteger(body.channel) || body.channel < 0 || body.channel > 7) {
+						throw new Error("Invalid channel");
+					}
+
+					const key = this.outputKeyFromChannel(instance, body.channel);
+					if (!key) {
+						throw new Error("Unknown output channel");
+					}
+
+					instance.state.digital_outputs[key] = this.normalizeBinary(body.state);
+					await this.persistInstances();
+					this.log(`Applied output ${instance.device_id}: ${key}=${instance.state.digital_outputs[key]}`);
+				} catch (error) {
+					this.log(`Command parse error (${instance.device_id}): ${error instanceof Error ? error.message : String(error)}`);
+				}
+				return;
+			}
+
+			if (topic === this.configTopic(instance.device_id)) {
+				try {
+					const body = JSON.parse(text) as { zone_id?: string; zone_name?: string };
+					instance.zone_id = body.zone_id ? String(body.zone_id) : null;
+					instance.zone_name = body.zone_name ? String(body.zone_name) : null;
+					await this.persistInstances();
+					this.log(`Applied config ${instance.device_id}: zone=${instance.zone_id || "unassigned"}`);
+				} catch (error) {
+					this.log(`Config parse error (${instance.device_id}): ${error instanceof Error ? error.message : String(error)}`);
+				}
+			}
+		});
+
+		instance.client.on("error", (error) => {
+			instance.status.last_error = error.message;
+			this.log(`MQTT error (${instance.device_id}): ${error.message}`);
+		});
+
+		instance.client.on("close", () => {
+			instance.status.connected = false;
+			this.log(`MQTT disconnected (${instance.device_id}).`);
+			this.refreshPublishTimer();
+		});
+	}
+
+	private async disconnectInstance(instance: VirtualInstance, logMessage = true): Promise<void> {
+		if (instance.client) {
+			await new Promise<void>((resolve) => {
+				instance.client?.end(false, {}, () => resolve());
+			});
+			instance.client = null;
+		}
+
+		instance.status.connected = false;
+		if (logMessage) {
+			this.log(`Disconnected ${instance.device_id}.`);
+		}
 	}
 
 	private refreshPublishTimer(): void {
@@ -277,67 +392,249 @@ class SimulatorService {
 			this.publishTimer = null;
 		}
 
-		if (!this.status.connected) {
+		if (!this.hasConnectedInstances()) {
 			return;
 		}
 
 		this.publishTimer = setInterval(() => {
-			void this.publishTelemetry();
-		}, this.connection.publish_interval_ms);
+			for (const instance of this.instances.values()) {
+				void this.publishAnnounce(instance);
+				void this.publishTelemetry(instance);
+			}
+		}, this.broker.publish_interval_ms);
 	}
 
-	private async publishTelemetry(): Promise<void> {
-		if (!this.client || !this.status.connected) {
+	private async publishTelemetry(instance: VirtualInstance): Promise<void> {
+		if (!instance.client || !instance.status.connected) {
 			return;
 		}
 
 		const payload = {
-			...this.state.sensors,
-			...this.state.digital_inputs
+			...instance.state.sensors,
+			...instance.state.digital_inputs,
+			...instance.state.digital_outputs
 		};
 
-		const data = JSON.stringify(payload);
-		this.client.publish(this.connection.telemetry_topic, data);
-		this.log(`MQTT telemetry -> ${this.connection.telemetry_topic}`);
+		instance.client.publish(this.telemetryTopic(instance.device_id), JSON.stringify(payload));
+		this.log(`Telemetry ${instance.device_id} -> ${this.telemetryTopic(instance.device_id)}`);
 	}
 
-	private async loadPersistedState(): Promise<void> {
-		try {
-			const data = await readFile(this.statePath, "utf8");
-			const parsed = JSON.parse(data) as SimulationState;
-			this.state = this.mergeState(DEFAULT_STATE, parsed);
-			this.log("Loaded persisted runtime state.");
-		} catch {
-			await this.persistState();
+	private async publishAnnounce(instance: VirtualInstance): Promise<void> {
+		if (!instance.client || !instance.status.connected) {
+			return;
 		}
+
+		const metadata: Record<string, string> = {
+			label: instance.label
+		};
+
+		if (instance.zone_id) {
+			metadata.zone_id = instance.zone_id;
+		}
+
+		if (instance.zone_name) {
+			metadata.zone_name = instance.zone_name;
+		}
+
+		const payload = {
+			device_id: instance.device_id,
+			firmware_version: "sim-v2",
+			metadata
+		};
+
+		instance.client.publish(this.announceTopic(instance.device_id), JSON.stringify(payload));
+		this.log(`Announce ${instance.device_id} -> ${this.announceTopic(instance.device_id)}`);
 	}
 
-	private async loadPersistedConnection(): Promise<void> {
-		try {
-			const data = await readFile(this.connectionPath, "utf8");
-			const parsed = JSON.parse(data) as Partial<ConnectionConfig>;
-			this.connection = {
-				...this.connection,
-				...parsed
+	private async publishRemoval(instance: VirtualInstance): Promise<void> {
+		if (!instance.client || !instance.status.connected) {
+			return;
+		}
+
+		const payload = {
+			type: "DEVICE_REMOVED",
+			device_id: instance.device_id,
+			firmware_version: "sim-v2",
+			metadata: {
+				label: instance.label
+			}
+		};
+
+		await new Promise<void>((resolve) => {
+			let settled = false;
+			const finish = () => {
+				if (!settled) {
+					settled = true;
+					resolve();
+				}
 			};
 
-			if (!this.connection.client_id || this.connection.client_id === LEGACY_STATIC_CLIENT_ID) {
-				this.connection.client_id = this.generatedClientId;
-				await this.persistConnection();
-				this.log(`Upgraded legacy MQTT client_id to '${this.connection.client_id}'.`);
+			instance.client?.publish(
+				this.announceTopic(instance.device_id),
+				JSON.stringify(payload),
+				{ qos: 1 },
+				(error) => {
+					if (error) {
+						this.log(`Removal announce publish failed (${instance.device_id}): ${error.message}`);
+					}
+					finish();
+				}
+			);
+
+			setTimeout(finish, 1500);
+		});
+
+		this.log(`Removal announce ${instance.device_id} -> ${this.announceTopic(instance.device_id)}`);
+	}
+
+	private announceTopic(deviceId: string): string {
+		return `edge/${this.broker.greenhouse_id}/zone/${deviceId}/registry/announce`;
+	}
+
+	private telemetryTopic(deviceId: string): string {
+		return `edge/${this.broker.greenhouse_id}/zone/${deviceId}/telemetry/raw`;
+	}
+
+	private commandTopic(deviceId: string): string {
+		return `edge/${this.broker.greenhouse_id}/zone/${deviceId}/command/output`;
+	}
+
+	private configTopic(deviceId: string): string {
+		return `edge/${this.broker.greenhouse_id}/zone/${deviceId}/config`;
+	}
+
+	private hasConnectedInstances(): boolean {
+		for (const instance of this.instances.values()) {
+			if (instance.status.connected) {
+				return true;
 			}
-			this.log("Loaded persisted connection settings.");
+		}
+		return false;
+	}
+
+	private getActiveInstance(): VirtualInstance | null {
+		if (!this.activeDeviceId) {
+			return null;
+		}
+		return this.instances.get(this.activeDeviceId) ?? null;
+	}
+
+	private getRequiredActiveInstance(): VirtualInstance {
+		const instance = this.getActiveInstance();
+		if (!instance) {
+			throw new Error("No active simulator instance is selected.");
+		}
+		return instance;
+	}
+
+	private ensureAtLeastOneInstance(): void {
+		if (this.instances.size > 0) {
+			if (!this.activeDeviceId || !this.instances.has(this.activeDeviceId)) {
+				const [first] = this.instances.keys();
+				this.activeDeviceId = first ?? null;
+			}
+			return;
+		}
+
+		const deviceId = randomUUID();
+		this.instances.set(deviceId, {
+			device_id: deviceId,
+			label: "Virtual Portenta 1",
+			zone_id: null,
+			zone_name: null,
+			state: structuredClone(DEFAULT_STATE),
+			status: this.disconnectedStatus(),
+			client: null
+		});
+		this.activeDeviceId = deviceId;
+	}
+
+	private disconnectedStatus(): ConnectionStatus {
+		return {
+			connected: false,
+			last_error: null,
+			last_connect_at: null
+		};
+	}
+
+	private makeLabel(label?: string): string {
+		const trimmed = label?.trim();
+		if (trimmed) {
+			return trimmed;
+		}
+
+		const nextIndex = this.instances.size + 1;
+		return `Virtual Portenta ${nextIndex}`;
+	}
+
+	private async loadPersistedBroker(): Promise<void> {
+		try {
+			const data = await readFile(this.brokerPath, "utf8");
+			const parsed = JSON.parse(data) as Partial<BrokerConfig> & {
+				telemetry_topic?: string;
+				command_topic?: string;
+				client_id?: string;
+			};
+
+			this.broker = {
+				...this.broker,
+				...parsed,
+				greenhouse_id: parsed.greenhouse_id ?? this.broker.greenhouse_id
+			};
+			await this.persistBroker();
+			this.log("Loaded persisted broker settings.");
 		} catch {
-			await this.persistConnection();
+			await this.persistBroker();
 		}
 	}
 
-	private async persistState(): Promise<void> {
-		await writeFile(this.statePath, JSON.stringify(this.state, null, 2), "utf8");
+	private async loadPersistedInstances(): Promise<void> {
+		try {
+			const data = await readFile(this.instancesPath, "utf8");
+			const parsed = JSON.parse(data) as PersistedInstancesFile;
+
+			this.instances.clear();
+			for (const item of parsed.instances ?? []) {
+				const deviceId = String(item.device_id || "").trim();
+				if (!deviceId) {
+					continue;
+				}
+
+				this.instances.set(deviceId, {
+					device_id: deviceId,
+					label: item.label?.trim() || `Virtual Portenta ${this.instances.size + 1}`,
+					zone_id: item.zone_id ?? null,
+					zone_name: item.zone_name ?? null,
+					state: this.mergeState(DEFAULT_STATE, item.state ?? {}),
+					status: this.disconnectedStatus(),
+					client: null
+				});
+			}
+
+			this.activeDeviceId = parsed.active_device_id ?? null;
+			this.log("Loaded persisted instances.");
+		} catch {
+			await this.persistInstances();
+		}
 	}
 
-	private async persistConnection(): Promise<void> {
-		await writeFile(this.connectionPath, JSON.stringify(this.connection, null, 2), "utf8");
+	private async persistBroker(): Promise<void> {
+		await writeFile(this.brokerPath, JSON.stringify(this.broker, null, 2), "utf8");
+	}
+
+	private async persistInstances(): Promise<void> {
+		const payload: PersistedInstancesFile = {
+			active_device_id: this.activeDeviceId,
+			instances: [...this.instances.values()].map((instance) => ({
+				device_id: instance.device_id,
+				label: instance.label,
+				zone_id: instance.zone_id,
+				zone_name: instance.zone_name,
+				state: instance.state
+			}))
+		};
+
+		await writeFile(this.instancesPath, JSON.stringify(payload, null, 2), "utf8");
 	}
 
 	private mergeState(base: SimulationState, incoming: Partial<SimulationState>): SimulationState {
@@ -363,7 +660,7 @@ class SimulatorService {
 	): void {
 		for (const [key, value] of Object.entries(patch)) {
 			if (key in target) {
-				(target as any)[key] = this.normalizeBinary(value);
+				(target as unknown as Record<string, BinaryValue>)[key] = this.normalizeBinary(value);
 			}
 		}
 	}
@@ -372,9 +669,9 @@ class SimulatorService {
 		return Number(value) >= 1 ? 1 : 0;
 	}
 
-	private outputKeyFromChannel(channel: number): keyof DigitalOutputState | null {
+	private outputKeyFromChannel(instance: VirtualInstance, channel: number): keyof DigitalOutputState | null {
 		const key = `dout_${String(channel).padStart(2, "0")}` as keyof DigitalOutputState;
-		return key in this.state.digital_outputs ? key : null;
+		return key in instance.state.digital_outputs ? key : null;
 	}
 
 	private sanitizeProfileName(name: string): string {
@@ -393,34 +690,22 @@ class SimulatorService {
 		}
 	}
 
-	private readConnectionDefaults(): ConnectionConfig {
+	private readBrokerDefaults(): BrokerConfig {
 		return {
-			...DEFAULT_CONNECTION,
-			host: process.env.MQTT_HOST ?? DEFAULT_CONNECTION.host,
-			port: this.clampInteger(process.env.MQTT_PORT, 1, 65535, DEFAULT_CONNECTION.port),
-			telemetry_topic: process.env.TELEMETRY_TOPIC ?? DEFAULT_CONNECTION.telemetry_topic,
-			command_topic: process.env.COMMAND_TOPIC ?? DEFAULT_CONNECTION.command_topic,
+			...DEFAULT_BROKER,
+			host: process.env.MQTT_HOST ?? DEFAULT_BROKER.host,
+			port: this.clampInteger(process.env.MQTT_PORT, 1, 65535, DEFAULT_BROKER.port),
+			greenhouse_id: process.env.GREENHOUSE_ID ?? DEFAULT_BROKER.greenhouse_id,
 			publish_interval_ms: this.clampInteger(
 				process.env.PUBLISH_INTERVAL_MS,
 				200,
 				3_600_000,
-				DEFAULT_CONNECTION.publish_interval_ms
+				DEFAULT_BROKER.publish_interval_ms
 			),
-			client_id: process.env.MQTT_CLIENT_ID ?? this.generatedClientId,
 			username: process.env.MQTT_USERNAME || undefined,
 			password: process.env.MQTT_PASSWORD || undefined,
 			auto_connect: (process.env.AUTO_CONNECT ?? "true").toLowerCase() !== "false"
 		};
-	}
-
-	private generateClientId(): string {
-		const safeHost = os
-			.hostname()
-			.toLowerCase()
-			.replace(/[^a-z0-9-]/g, "-")
-			.slice(0, 24);
-		const suffix = `${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
-		return `virtual-portenta-${safeHost}-${suffix}`;
 	}
 
 	private clampInteger(value: unknown, min: number, max: number, fallback: number): number {
@@ -434,8 +719,8 @@ class SimulatorService {
 	public async clearPersistedData(): Promise<void> {
 		await rm(this.dataDir, { recursive: true, force: true });
 		await mkdir(this.profilesDir, { recursive: true });
-		await this.persistConnection();
-		await this.persistState();
+		await this.persistBroker();
+		await this.persistInstances();
 	}
 }
 
