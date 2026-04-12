@@ -6,9 +6,9 @@ services:
     ports:
       - "1883:1883"
     volumes:
-      - ./mosquitto/config:/mosquitto/config:z
-      - ./mosquitto/data:/mosquitto/data:z
-      - ./mosquitto/log:/mosquitto/log:z
+      - ./mosquitto/config:/mosquitto/config:ro,z
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
     restart: unless-stopped
 
   # The Local Decision & Processing Engine
@@ -65,3 +65,7 @@ volumes:
     name: gms_edge_sqlite_db
   simulator_hw_data:
     name: gms_simulator_hw_data
+  mosquitto_data:
+    name: gms_mosquitto_data
+  mosquitto_log:
+    name: gms_mosquitto_log
