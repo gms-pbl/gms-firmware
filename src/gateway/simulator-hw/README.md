@@ -1,81 +1,92 @@
 # simulator-hw
 
-Virtual hardware simulator for the GMS Portenta flow.
+Virtual hardware simulator for the GMS multi-zone flow.
 
-This app simulates the current MQTT behavior of your firmware:
-- publishes telemetry to `telemetry/zone1`
-- listens for commands on `commands/zone1/output`
-- applies output changes to virtual `dout_00..dout_07`
+It emulates multiple Portenta zone devices with per-instance state and unique GUID IDs.
 
-It also provides a Svelte UI to:
-- edit sensor values
-- toggle digital inputs/outputs
+## What It Simulates
+
+For each virtual device:
+
+- publishes announce to `edge/{greenhouse_id}/zone/{device_id}/registry/announce`
+- publishes raw telemetry to `edge/{greenhouse_id}/zone/{device_id}/telemetry/raw`
+- receives commands on `edge/{greenhouse_id}/zone/{device_id}/command/output`
+- receives config on `edge/{greenhouse_id}/zone/{device_id}/config`
+
+Published telemetry includes:
+
+- sensor metrics (`air_*`, `soil_*`)
+- digital inputs (`din_00..din_03`)
+- digital outputs (`dout_00..dout_07`)
+
+## UI Features
+
+- add/remove/select virtual instances
+- edit sensors and digital IO of the active instance
+- connect/disconnect all instances
+- broker + greenhouse configuration
 - save/load/delete/clear state profiles
-- edit connection settings and connect/disconnect from the broker
 
-## Local development
+## Run Locally (Bun)
 
 ```bash
 bun install
 bun run dev
 ```
 
-UI default URL: `http://localhost:5173`
+URL: `http://localhost:5173`
 
-## Docker development (hot reload)
+## Run with Gateway Docker Stack
 
-From `src/gateway`:
-
-```bash
-docker compose up -d --build
-```
-
-The `simulator_hw` service runs `vite dev` inside Docker with bind mounts, so edits under `src/gateway/simulator-hw` hot-reload without restarting the container.
-
-UI URL in Docker mode: `http://localhost:4173`
-
-### Production-style local run
+From `firmware/src/gateway`:
 
 ```bash
-bun run build
-bun run start
+./scripts/up.sh simulator_hw
 ```
 
-UI default URL: `http://localhost:4173`
+URL: `http://localhost:4173`
 
-## Configuration
+## Optional `.env` Configuration
 
-You can provide startup defaults through env vars (`.env` supported by SvelteKit):
+Create `src/gateway/simulator-hw/.env` if needed:
 
-- `MQTT_HOST`
-- `MQTT_PORT`
-- `TELEMETRY_TOPIC`
-- `COMMAND_TOPIC`
-- `PUBLISH_INTERVAL_MS`
-- `MQTT_CLIENT_ID`
-- `MQTT_USERNAME` (optional)
-- `MQTT_PASSWORD` (optional)
-- `AUTO_CONNECT` (`true`/`false`)
-- `SIM_DATA_DIR`
+```env
+MQTT_HOST=127.0.0.1
+MQTT_PORT=1883
+GREENHOUSE_ID=greenhouse-demo
+PUBLISH_INTERVAL_MS=10000
+MQTT_USERNAME=
+MQTT_PASSWORD=
+AUTO_CONNECT=true
+SIM_DATA_DIR=./sim-data
+```
 
-Important: settings changed in the UI are persisted and override env defaults on next restart.
+Runtime behavior note:
 
-## Saved state and profiles
+- values edited in UI are persisted and override startup defaults after restart.
 
-Persisted files are stored under `sim-data/` by default:
-- `current-state.json`
+## Persisted Data
+
+Default folder: `sim-data/`
+
 - `connection.json`
+- `instances.json`
 - `profiles/*.json`
 
-This directory is ignored by git.
+## Low-Level Command Payload
 
-## MQTT command payload format
-
-The simulator expects commands matching your firmware contract:
+Edge engine sends relay-style commands:
 
 ```json
 { "channel": 2, "state": 1 }
 ```
 
-- `channel`: integer `0..7`
+- `channel`: `0..7`
 - `state`: `0` (LOW) or `1` (HIGH)
+
+## Useful Checks
+
+```bash
+bun run check
+bun run build
+```
