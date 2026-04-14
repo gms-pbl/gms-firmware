@@ -24,10 +24,21 @@
   #error "MQTT_BROKER is not defined. Check your .env file."
 #endif
 
+#ifndef GREENHOUSE_ID
+  #define GREENHOUSE_ID "greenhouse-demo"
+#endif
+
+#ifndef DEVICE_ID
+  #define DEVICE_ID ""
+#endif
+
+#ifndef DEVICE_LABEL
+  #define DEVICE_LABEL "Portenta H7"
+#endif
+
 // MQTT Settings
 #define MQTT_PORT 1883
-#define MQTT_TOPIC_TELEMETRY "telemetry/zone1"
-#define MQTT_TOPIC_COMMAND_OUTPUT "commands/zone1/output"
+#define MQTT_ANNOUNCE_INTERVAL_MS 30000
 
 // Modbus Settings
 #define AIR_SENSOR_ADDRESS 10
