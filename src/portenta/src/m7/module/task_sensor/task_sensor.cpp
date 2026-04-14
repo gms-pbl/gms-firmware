@@ -1,5 +1,6 @@
 #include "task_sensor.h"
 #include "../task_mqtt/task_mqtt.h"
+#include "../task_io/task_io.h"
 #include <Arduino_PortentaMachineControl.h>
 
 namespace gms_edge {
@@ -20,6 +21,8 @@ void execute() {
         float soil_moist = 0, soil_temp = 0, soil_cond = 0, soil_ph = 0;
         float soil_n = 0, soil_p = 0, soil_k = 0, soil_sal = 0, soil_tds = 0;
         int din_00 = 0, din_01 = 0, din_02 = 0, din_03 = 0;
+        int dout_00 = 0, dout_01 = 0, dout_02 = 0, dout_03 = 0;
+        int dout_04 = 0, dout_05 = 0, dout_06 = 0, dout_07 = 0;
 
         if (air_sensor.read_all_registers()) {
             air_hum = air_sensor.get_humidity();
@@ -46,7 +49,17 @@ void execute() {
         din_02 = MachineControl_DigitalInputs.read(DIN_READ_CH_PIN_02);
         din_03 = MachineControl_DigitalInputs.read(DIN_READ_CH_PIN_03);
 
-        // Send all 15 values to MQTT publisher directly
+        module::task_io::get_output_states(
+            dout_00,
+            dout_01,
+            dout_02,
+            dout_03,
+            dout_04,
+            dout_05,
+            dout_06,
+            dout_07);
+
+        // Send sensor + input + output states to MQTT publisher
         module::task_mqtt::publish_telemetry(
             air_hum, 
             air_temp, 
@@ -62,7 +75,15 @@ void execute() {
             din_00,
             din_01,
             din_02,
-            din_03
+            din_03,
+            dout_00,
+            dout_01,
+            dout_02,
+            dout_03,
+            dout_04,
+            dout_05,
+            dout_06,
+            dout_07
         );
 
         ThisThread::sleep_for(std::chrono::milliseconds(SENSOR_POLL_INTERVAL_MS));
