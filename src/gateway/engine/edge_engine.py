@@ -11,7 +11,7 @@ import paho.mqtt.client as mqtt
 LOCAL_HOST = os.environ.get("LOCAL_BROKER_HOST", "mosquitto")
 LOCAL_PORT = int(os.environ.get("LOCAL_BROKER_PORT", 1883))
 
-CLOUD_HOST = os.environ.get("CLOUD_BROKER_HOST", "emqx.cloud.example.com")
+CLOUD_HOST = os.environ.get("CLOUD_BROKER_HOST", "mqtt.cloud.example.com")
 CLOUD_PORT = int(os.environ.get("CLOUD_BROKER_PORT", 1883))
 CLOUD_USER = os.environ.get("CLOUD_USERNAME", "edge_gateway_1")
 CLOUD_PASS = os.environ.get("CLOUD_PASSWORD", "secret")

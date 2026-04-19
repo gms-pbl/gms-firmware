@@ -27,7 +27,7 @@ services:
       - LOCAL_BROKER_HOST=mosquitto
       - LOCAL_BROKER_PORT=1883
       # Local integration default: publish uplink/downlink against local broker.
-      # Override these to your real EMQX host/port for cloud runs.
+      # Override these to your real cloud MQTT broker host/port for WAN runs.
       - CLOUD_BROKER_HOST=mosquitto
       - CLOUD_BROKER_PORT=1883
       - CLOUD_USERNAME=edge_gateway_1
