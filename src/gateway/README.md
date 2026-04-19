@@ -106,3 +106,9 @@ docker logs -f gms_simulator_hw
 ```bash
 docker logs -f gms_local_broker
 ```
+
+Expected normal cadence in logs:
+
+- registry announce events roughly every 10-30s (depends on device/simulator settings)
+- gateway status heartbeat every 30s by default
+- telemetry snapshots/deltas at configured publish intervals
