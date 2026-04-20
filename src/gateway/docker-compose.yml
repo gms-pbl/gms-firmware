@@ -32,9 +32,9 @@ services:
       - CLOUD_BROKER_PORT=1883
       - CLOUD_USERNAME=edge_gateway_1
       - CLOUD_PASSWORD=secret_cert_or_pass
-      - TENANT_ID=tenant-demo
-      - GREENHOUSE_ID=greenhouse-demo
-      - GATEWAY_ID=greenhouse-demo
+      - TENANT_ID=test
+      - GREENHOUSE_ID=test
+      - GATEWAY_ID=test
       - CONFIG_REHYDRATE_COOLDOWN_SEC=45
 
   simulator_hw:
@@ -54,7 +54,7 @@ services:
       - PORT=4173
       - MQTT_HOST=mosquitto
       - MQTT_PORT=1883
-      - GREENHOUSE_ID=greenhouse-demo
+      - GREENHOUSE_ID=test
       - PUBLISH_INTERVAL_MS=10000
       - AUTO_CONNECT=true
       - SIM_DATA_DIR=/app/sim-data
