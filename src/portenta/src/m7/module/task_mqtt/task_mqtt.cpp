@@ -1,6 +1,7 @@
 #include "task_mqtt.h"
 #include <ArduinoMqttClient.h>
 #include <WiFi.h>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include "../task_io/task_io.h"
@@ -68,6 +69,42 @@ String topic_announce;
 String topic_telemetry;
 String topic_command;
 String topic_config;
+
+bool localBrokerPolicyWarned = false;
+
+bool isPrivateOrLocalIp(const IPAddress& ip) {
+    return
+        ip[0] == 10 ||
+        (ip[0] == 172 && ip[1] >= 16 && ip[1] <= 31) ||
+        (ip[0] == 192 && ip[1] == 168) ||
+        (ip[0] == 169 && ip[1] == 254) ||
+        ip[0] == 127;
+}
+
+bool isAllowedLocalBrokerHost(const char* host) {
+    IPAddress parsed;
+    if (parsed.fromString(host)) {
+        return isPrivateOrLocalIp(parsed);
+    }
+
+    String normalized(host);
+    normalized.trim();
+    normalized.toLowerCase();
+
+    if (normalized == "localhost") {
+        return true;
+    }
+
+    return normalized.endsWith(".local");
+}
+
+uint16_t resolveMqttPort() {
+    unsigned long parsed = strtoul(MQTT_PORT, nullptr, 10);
+    if (parsed == 0 || parsed > 65535) {
+        return 1883;
+    }
+    return static_cast<uint16_t>(parsed);
+}
 
 String jsonEscape(const String& input) {
     String escaped;
@@ -341,6 +378,18 @@ bool attemptMqttConnection() {
         return false;
     }
 
+    if (!isAllowedLocalBrokerHost(MQTT_BROKER)) {
+        if (!localBrokerPolicyWarned) {
+            Serial.println("MQTT broker rejected by local-only policy.");
+            Serial.println("Set MQTT_BROKER to local LAN IP (RFC1918) or .local hostname.");
+            Serial.print("Configured MQTT_BROKER: ");
+            Serial.println(MQTT_BROKER);
+            localBrokerPolicyWarned = true;
+        }
+        return false;
+    }
+    localBrokerPolicyWarned = false;
+
     unsigned long now = millis();
     if (now - last_mqtt_attempt_ms < MQTT_RETRY_INTERVAL_MS) {
         return false;
@@ -348,14 +397,15 @@ bool attemptMqttConnection() {
     last_mqtt_attempt_ms = now;
 
     Serial.print("Connecting to MQTT broker...");
+    uint16_t brokerPort = resolveMqttPort();
     IPAddress brokerIP;
     bool broker_is_ip = brokerIP.fromString(MQTT_BROKER);
 
     bool connected = false;
     if (broker_is_ip) {
-        connected = mqttClient.connect(brokerIP, MQTT_PORT);
+        connected = mqttClient.connect(brokerIP, brokerPort);
     } else {
-        connected = mqttClient.connect(MQTT_BROKER, MQTT_PORT);
+        connected = mqttClient.connect(MQTT_BROKER, brokerPort);
     }
 
     if (!connected) {
