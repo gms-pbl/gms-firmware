@@ -1,0 +1,63 @@
+services:
+  cloud_broker:
+    image: eclipse-mosquitto:2
+    container_name: gms_sim_cloud_broker
+    command:
+      - /bin/sh
+      - -c
+      - >
+        printf 'listener 1883\nallow_anonymous true\npersistence true\npersistence_location /mosquitto/data/\nlog_dest stdout\n'
+        > /tmp/mosquitto.conf
+        && exec mosquitto -c /tmp/mosquitto.conf
+    ports:
+      - "1883:1883"
+    volumes:
+      - cloud_broker_data:/mosquitto/data
+    networks:
+      - gms-sim-cluster
+    restart: unless-stopped
+
+  simulator_hw:
+    build:
+      context: ./simulator-hw
+      dockerfile: Dockerfile
+    container_name: gms_sim_cluster_manager
+    working_dir: /app
+    command: sh -lc "bun install --ignore-scripts && bun run dev --host 0.0.0.0 --port 4173"
+    ports:
+      - "4173:4173"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=4173
+      - SIM_DATA_DIR=/app/sim-data
+      - SIM_DOCKER_SOCKET=/var/run/docker.sock
+      - SIM_CLUSTER_NETWORK=gms-sim-cluster
+      - SIM_EDGE_IMAGE=gms-edge-engine:cluster
+      - SIM_BROKER_IMAGE=eclipse-mosquitto:2.0
+      - TENANT_ID=test
+      - GREENHOUSE_ID=test
+      - GATEWAY_ID=test
+      - CLOUD_BROKER_HOST=host.docker.internal
+      - CLOUD_BROKER_PORT=1883
+    volumes:
+      - ./simulator-hw:/app:z
+      - simulator_hw_cluster_data:/app/sim-data
+      - /var/run/docker.sock:/var/run/docker.sock:z
+    security_opt:
+      - label=disable
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - gms-sim-cluster
+    restart: unless-stopped
+
+volumes:
+  cloud_broker_data:
+    name: gms_sim_cloud_broker_data
+  simulator_hw_cluster_data:
+    name: gms_simulator_hw_cluster_data
+
+networks:
+  gms-sim-cluster:
+    name: gms-sim-cluster
+    external: true
