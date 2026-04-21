@@ -45,6 +45,7 @@ File: `firmware/src/portenta/.env`
 WIFI_SSID="your-wifi"
 WIFI_PASS="your-pass"
 MQTT_BROKER="192.168.1.32"      # gateway mini PC IP
+MQTT_PORT="18831"               # node-local broker port exposed by cluster gateway
 GREENHOUSE_ID="greenhouse-demo" # must match gateway GREENHOUSE_ID
 
 # Optional:
@@ -73,17 +74,58 @@ From `firmware/src/portenta`:
 ## Expected Runtime Sequence
 
 1. Device connects WiFi.
-2. Device connects MQTT broker (`MQTT_BROKER:1883`).
+2. Device connects MQTT broker (`MQTT_BROKER:MQTT_PORT`).
 3. Device publishes announce.
 4. Gateway may push cached config (`zone_id`, `zone_name`).
 5. Device applies config and publishes telemetry continuously.
 6. Commands from backend route through gateway to `command/output`.
 
+## Connecting Hardware to Cluster Gateway
+
+When using simulator cluster manager (`http://localhost:4173`):
+
+1. Pick the gateway node (for example `test1`).
+2. Read its local endpoint from the card: `Local MQTT: internal:<port>`.
+3. Set Portenta `.env` to the host machine LAN IP + that port:
+
+```env
+MQTT_BROKER="192.168.1.32"
+MQTT_PORT="18833"
+GREENHOUSE_ID="test1"
+```
+
+4. Build and upload M7 firmware.
+5. Login in frontend (`/g`), open the matching greenhouse, and verify discovery in zone registry.
+
+Notes:
+
+- `GREENHOUSE_ID` must match the selected gateway greenhouse id.
+- If two tenants both use `test1`, isolation is still preserved by tenant-scoped backend auth and gateway tenant config.
+- The node port is the decisive hardware routing selector in cluster mode.
+
+## Local-Only Broker Safety
+
+- Firmware now enforces local-only MQTT broker targets.
+- Allowed broker hosts:
+  - private IPv4 ranges (`10.x`, `172.16-31.x`, `192.168.x`)
+  - link-local (`169.254.x`)
+  - loopback (`127.x`)
+  - hostnames ending with `.local`
+  - `localhost`
+- Public broker hostnames/IPs are rejected at runtime to prevent accidental direct cloud connections from devices.
+
+## If Device Does Not Show in Frontend
+
+- Verify Portenta serial log shows successful MQTT connect and telemetry publish.
+- Verify `MQTT_BROKER` + `MQTT_PORT` point to the intended gateway local broker endpoint.
+- Verify frontend user is logged into the tenant that owns that greenhouse.
+- Verify backend and gateway edge are running and connected.
+
 ## Before Plugging Real Hardware
 
-- Ensure gateway stack is running (`firmware/src/gateway/scripts/up.sh`).
+- Ensure gateway stack is running (`firmware/src/gateway/scripts/up.sh` or `firmware/src/gateway/scripts/up-cluster.sh`).
 - Ensure backend is running (`backend/infra/scripts/up.sh`, or `backend/infra/scripts/up.sh -v` to follow logs).
-- Ensure frontend zones page uses same greenhouse id.
+- Ensure frontend greenhouse/zone page uses the same greenhouse id.
 
 ## Useful Files
 
