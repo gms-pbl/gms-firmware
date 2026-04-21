@@ -1,16 +1,14 @@
 import { json } from "@sveltejs/kit";
-import { simulator } from "$lib/server/simulator";
+import { cluster } from "$lib/server/cluster";
+import { parseGatewayBody } from "$lib/server/request-utils";
 
 export async function POST({ request }) {
-	await simulator.init();
-
-	const body = (await request.json()) as { device_id?: string };
-	if (!body.device_id) {
+	const { gatewayId, payload } = await parseGatewayBody(request);
+	if (typeof payload.device_id !== "string" || !payload.device_id.trim()) {
 		return json({ error: "device_id is required." }, { status: 400 });
 	}
 
-	await simulator.selectInstance(body.device_id);
-
-	const profiles = await simulator.listProfiles();
-	return json(simulator.getRuntime(profiles));
+	const { simulator } = await cluster.getGatewaySimulator(gatewayId);
+	await simulator.selectInstance(payload.device_id.trim());
+	return json(await cluster.getGatewayRuntime(gatewayId));
 }
