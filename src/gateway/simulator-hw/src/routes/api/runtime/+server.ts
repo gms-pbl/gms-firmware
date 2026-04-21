@@ -1,8 +1,8 @@
 import { json } from "@sveltejs/kit";
-import { simulator } from "$lib/server/simulator";
+import { cluster } from "$lib/server/cluster";
+import { gatewayIdFromUrl } from "$lib/server/request-utils";
 
-export async function GET() {
-	await simulator.init();
-	const profiles = await simulator.listProfiles();
-	return json(simulator.getRuntime(profiles));
+export async function GET({ url }) {
+	const gatewayId = gatewayIdFromUrl(url);
+	return json(await cluster.getGatewayRuntime(gatewayId));
 }

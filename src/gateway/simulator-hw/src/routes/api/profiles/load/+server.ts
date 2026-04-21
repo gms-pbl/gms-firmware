@@ -1,15 +1,14 @@
 import { json } from "@sveltejs/kit";
-import { simulator } from "$lib/server/simulator";
+import { cluster } from "$lib/server/cluster";
+import { parseGatewayBody } from "$lib/server/request-utils";
 
 export async function POST({ request }) {
-	await simulator.init();
-
-	const body = (await request.json()) as { name?: string };
-	if (!body.name) {
+	const { gatewayId, payload } = await parseGatewayBody(request);
+	if (typeof payload.name !== "string" || !payload.name.trim()) {
 		return json({ error: "Profile name is required." }, { status: 400 });
 	}
 
-	await simulator.loadProfile(body.name);
-	const profiles = await simulator.listProfiles();
-	return json(simulator.getRuntime(profiles));
+	const { simulator } = await cluster.getGatewaySimulator(gatewayId);
+	await simulator.loadProfile(payload.name.trim());
+	return json(await cluster.getGatewayRuntime(gatewayId));
 }

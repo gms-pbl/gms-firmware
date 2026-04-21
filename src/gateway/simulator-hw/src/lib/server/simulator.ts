@@ -46,18 +46,34 @@ interface PersistedInstancesFile {
 
 const EVENT_LIMIT = 160;
 
-class SimulatorService {
-	private broker: BrokerConfig = this.readBrokerDefaults();
+interface SimulatorServiceOptions {
+	dataDir?: string;
+	defaults?: Partial<BrokerConfig>;
+}
+
+export class SimulatorService {
+	private broker: BrokerConfig;
 	private instances = new Map<string, VirtualInstance>();
 	private activeDeviceId: string | null = null;
 	private events: string[] = [];
 	private initialized = false;
 	private publishTimer: ReturnType<typeof setInterval> | null = null;
 
-	private readonly dataDir = process.env.SIM_DATA_DIR ?? path.resolve(process.cwd(), "sim-data");
-	private readonly profilesDir = path.join(this.dataDir, "profiles");
-	private readonly brokerPath = path.join(this.dataDir, "connection.json");
-	private readonly instancesPath = path.join(this.dataDir, "instances.json");
+	private readonly dataDir: string;
+	private readonly profilesDir: string;
+	private readonly brokerPath: string;
+	private readonly instancesPath: string;
+
+	public constructor(options: SimulatorServiceOptions = {}) {
+		this.dataDir = options.dataDir ?? process.env.SIM_DATA_DIR ?? path.resolve(process.cwd(), ".sim-data");
+		this.profilesDir = path.join(this.dataDir, "profiles");
+		this.brokerPath = path.join(this.dataDir, "connection.json");
+		this.instancesPath = path.join(this.dataDir, "instances.json");
+		this.broker = {
+			...this.readBrokerDefaults(),
+			...(options.defaults ?? {})
+		};
+	}
 
 	public async init(): Promise<void> {
 		if (this.initialized) {
@@ -102,6 +118,10 @@ class SimulatorService {
 			profiles,
 			events: [...this.events]
 		};
+	}
+
+	public getBrokerConfig(): BrokerConfig {
+		return { ...this.broker };
 	}
 
 	public async listProfiles(): Promise<string[]> {
@@ -191,8 +211,9 @@ class SimulatorService {
 	}
 
 	public async setBroker(patch: Partial<BrokerConfig>): Promise<void> {
+		const previous = this.broker;
 		const next = {
-			...this.broker,
+			...previous,
 			...patch
 		};
 
@@ -202,12 +223,28 @@ class SimulatorService {
 		next.publish_interval_ms = this.clampInteger(next.publish_interval_ms, 200, 3_600_000, DEFAULT_BROKER.publish_interval_ms);
 		next.auto_connect = Boolean(next.auto_connect);
 
-		const shouldReconnect = this.hasConnectedInstances();
+		const hadClientSessions = this.hasClientSessions();
+		const endpointChanged =
+			next.host !== previous.host ||
+			next.port !== previous.port ||
+			next.username !== previous.username ||
+			next.password !== previous.password ||
+			next.greenhouse_id !== previous.greenhouse_id;
+		const autoConnectChanged = next.auto_connect !== previous.auto_connect;
 		this.broker = next;
 		await this.persistBroker();
 		this.log("Broker settings updated.");
 
-		if (shouldReconnect || this.broker.auto_connect) {
+		if (!this.broker.auto_connect) {
+			if (hadClientSessions) {
+				await this.disconnect(false);
+			} else {
+				this.refreshPublishTimer();
+			}
+			return;
+		}
+
+		if (endpointChanged || autoConnectChanged || !hadClientSessions) {
 			await this.connect();
 		} else {
 			this.refreshPublishTimer();
@@ -284,7 +321,7 @@ class SimulatorService {
 			clientId,
 			username: this.broker.username || undefined,
 			password: this.broker.password || undefined,
-			reconnectPeriod: 3000,
+			reconnectPeriod: this.broker.auto_connect ? 3000 : 0,
 			connectTimeout: 5000,
 			clean: true
 		});
@@ -506,6 +543,15 @@ class SimulatorService {
 	private hasConnectedInstances(): boolean {
 		for (const instance of this.instances.values()) {
 			if (instance.status.connected) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private hasClientSessions(): boolean {
+		for (const instance of this.instances.values()) {
+			if (instance.client) {
 				return true;
 			}
 		}

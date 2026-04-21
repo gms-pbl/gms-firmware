@@ -1,12 +1,10 @@
 import { json } from "@sveltejs/kit";
-import { simulator } from "$lib/server/simulator";
+import { cluster } from "$lib/server/cluster";
+import { parseGatewayBody } from "$lib/server/request-utils";
 
 export async function POST({ request }) {
-	await simulator.init();
-
-	const payload = (await request.json()) as Record<string, unknown>;
+	const { gatewayId, payload } = await parseGatewayBody(request);
+	const { simulator } = await cluster.getGatewaySimulator(gatewayId);
 	await simulator.updateState(payload as never);
-
-	const profiles = await simulator.listProfiles();
-	return json(simulator.getRuntime(profiles));
+	return json(await cluster.getGatewayRuntime(gatewayId));
 }
