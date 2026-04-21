@@ -1,54 +1,75 @@
 # simulator-hw
 
-Virtual hardware simulator for the GMS multi-zone flow.
+Gateway cluster manager and virtual Portenta simulator for GMS.
 
-It emulates multiple Portenta zone devices with per-instance state and unique GUID IDs.
+## What It Does
 
-## What It Simulates
+This app now has two layers:
+
+- cluster manager (`/`) for multiple simulated gateways
+- per-gateway virtual device simulator (`/g/{gateway_id}`)
 
 For each virtual device:
 
-- publishes announce to `edge/{greenhouse_id}/zone/{device_id}/registry/announce`
-- publishes raw telemetry to `edge/{greenhouse_id}/zone/{device_id}/telemetry/raw`
-- receives commands on `edge/{greenhouse_id}/zone/{device_id}/command/output`
-- receives config on `edge/{greenhouse_id}/zone/{device_id}/config`
+- publish announce to `edge/{greenhouse_id}/zone/{device_id}/registry/announce`
+- publish raw telemetry to `edge/{greenhouse_id}/zone/{device_id}/telemetry/raw`
+- receive commands on `edge/{greenhouse_id}/zone/{device_id}/command/output`
+- receive config on `edge/{greenhouse_id}/zone/{device_id}/config`
 
-Published telemetry includes:
+Telemetry includes numeric sensor keys plus digital IO (`din_*`, `dout_*`).
 
-- sensor metrics (`air_*`, `soil_*`)
-- digital inputs (`din_00..din_03`)
-- digital outputs (`dout_00..dout_07`)
+## UI Routes
 
-## UI Features
+- `/` - gateway cluster manager
+- `/g/{gateway_id}` - simulator controls for one gateway
+- `/{gateway_id}` - compatibility redirect to `/g/{gateway_id}`
+
+## Cluster Manager Features (`/`)
+
+- add/update/remove gateways (tenant, greenhouse, gateway id)
+- start/stop gateway containers from UI
+- inspect runtime health (broker + edge)
+- auto-assign unique local MQTT host ports per gateway
+- display local MQTT endpoint inline as `internal:<port>`
+
+## Per-Gateway Simulator Features (`/g/{gateway_id}`)
 
 - add/remove/select virtual instances
-- edit sensors and digital IO of the active instance
-- connect/disconnect all instances
-- broker + greenhouse configuration
-- save/load/delete/clear state profiles
+- connect/disconnect simulator instances
+- edit active instance sensors/digital IO
+- explicit `Save Sensors` and `Reset State` controls
+- broker/connection profile save/load/delete/clear
 
 ## Run Locally (Bun)
+
+From `firmware/src/gateway/simulator-hw`:
 
 ```bash
 bun install
 bun run dev
 ```
 
-URL: `http://localhost:5173`
+Default URL (local Bun): `http://localhost:5173`
 
-## Run with Gateway Docker Stack
+## Run in Gateway Cluster Stack
 
 From `firmware/src/gateway`:
 
 ```bash
-./scripts/up.sh simulator_hw
+./scripts/up-cluster.sh
 ```
 
-URL: `http://localhost:4173`
+Cluster manager URL: `http://localhost:4173`
 
-## Optional `.env` Configuration
+Stop:
 
-Create `src/gateway/simulator-hw/.env` if needed:
+```bash
+./scripts/down-cluster.sh
+```
+
+## Optional `.env` Configuration (Local Bun)
+
+Create `firmware/src/gateway/simulator-hw/.env` if needed:
 
 ```env
 MQTT_HOST=127.0.0.1
@@ -58,20 +79,25 @@ PUBLISH_INTERVAL_MS=10000
 MQTT_USERNAME=
 MQTT_PASSWORD=
 AUTO_CONNECT=true
-SIM_DATA_DIR=./sim-data
+SIM_DATA_DIR=./.sim-data
 ```
 
-Runtime behavior note:
-
-- values edited in UI are persisted and override startup defaults after restart.
+Cluster manager-specific envs are provided by `docker-compose.cluster.yml` (for example `SIM_DOCKER_SOCKET`, `SIM_CLUSTER_NETWORK`, `SIM_EDGE_IMAGE`).
 
 ## Persisted Data
 
-Default folder: `sim-data/`
+Simulator state is persisted and survives restarts.
 
-- `connection.json`
-- `instances.json`
-- `profiles/*.json`
+Local Bun default: `./.sim-data/`
+
+Cluster container default: `/app/sim-data/`
+
+Key files:
+
+- `gateways.json`
+- `gateways/{gateway_id}/connection.json`
+- `gateways/{gateway_id}/instances.json`
+- `gateways/{gateway_id}/profiles/*.json`
 
 ## Low-Level Command Payload
 
