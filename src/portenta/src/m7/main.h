@@ -37,7 +37,9 @@
 #endif
 
 // MQTT Settings
-#define MQTT_PORT 1883
+#ifndef MQTT_PORT
+  #define MQTT_PORT "1883"
+#endif
 #define MQTT_ANNOUNCE_INTERVAL_MS 30000
 
 // Modbus Settings
