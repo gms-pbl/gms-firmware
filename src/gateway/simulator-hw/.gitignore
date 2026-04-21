@@ -24,5 +24,6 @@ vite.config.ts.timestamp-*
 
 # Simulator persisted state
 /sim-data
+/.sim-data
 # Playwright
 test-results

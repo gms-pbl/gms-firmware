@@ -71,6 +71,51 @@ export interface SimulatorRuntime {
 	events: string[];
 }
 
+export interface CloudBrokerConfig {
+	host: string;
+	port: number;
+	username?: string;
+	password?: string;
+}
+
+export interface GatewayConfig {
+	gateway_id: string;
+	label: string;
+	tenant_id: string;
+	greenhouse_id: string;
+	host_mqtt_port: number | null;
+	cloud_broker: CloudBrokerConfig;
+	auto_start: boolean;
+}
+
+export interface GatewayContainerStatus {
+	exists: boolean;
+	running: boolean;
+	status: string;
+	container_name: string;
+	container_id: string | null;
+	host_port: number | null;
+	network_ip: string | null;
+}
+
+export interface GatewaySummary {
+	config: GatewayConfig;
+	broker: GatewayContainerStatus;
+	edge: GatewayContainerStatus;
+	simulator_total_instances: number;
+	simulator_connected_instances: number;
+}
+
+export interface GatewaySimulatorRuntime extends SimulatorRuntime {
+	gateway: GatewaySummary;
+}
+
+export interface ClusterRuntime {
+	gateways: GatewaySummary[];
+	active_gateway_id: string | null;
+	events: string[];
+}
+
 export const DEFAULT_STATE: SimulationState = {
 	sensors: {
 		air_temp: 24.5,
