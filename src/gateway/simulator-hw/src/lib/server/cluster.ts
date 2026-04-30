@@ -83,17 +83,27 @@ class SimulatorClusterService {
 		const gatewayId = await this.resolveGatewayId(gatewayIdCandidate ?? undefined, true);
 		const gateway = this.requireGateway(gatewayId);
 
-		const inspection = await this.orchestrator.inspectGateway(gatewayId);
+		let inspection = await this.orchestrator.inspectGateway(gatewayId);
+		if (inspection.broker.running || inspection.edge.running) {
+			const recreatedEdge = await this.orchestrator.reconcileRunningGateway(gateway);
+			if (recreatedEdge) {
+				this.log(`Gateway '${gatewayId}' edge recreated to use the current edge image.`);
+			}
+			inspection = await this.orchestrator.inspectGateway(gatewayId);
+		}
+
 		const simulator = await this.ensureSimulator(gateway);
 		await this.syncSimulatorBroker(simulator, gateway, inspection.broker);
 
 		const profiles = await simulator.listProfiles();
 		const runtime = simulator.getRuntime(profiles);
 		const summary = this.toGatewaySummary(gateway, inspection, runtime.instances.length, runtime.instances);
+		const thresholdDebug = await this.orchestrator.readThresholdDebug(gatewayId);
 
 		return {
 			...runtime,
-			gateway: summary
+			gateway: summary,
+			threshold_debug: thresholdDebug
 		};
 	}
 
@@ -259,6 +269,12 @@ class SimulatorClusterService {
 				await this.orchestrator.recreateGateway(gateway);
 				inspection = await this.orchestrator.inspectGateway(gateway.gateway_id);
 				this.log(`Gateway '${gateway.gateway_id}' recreated to apply host MQTT port ${gateway.host_mqtt_port}.`);
+			} else if (inspection.broker.running || inspection.edge.running) {
+				const recreatedEdge = await this.orchestrator.reconcileRunningGateway(gateway);
+				if (recreatedEdge) {
+					inspection = await this.orchestrator.inspectGateway(gateway.gateway_id);
+					this.log(`Gateway '${gateway.gateway_id}' edge recreated to use the current edge image.`);
+				}
 			}
 
 			await this.syncSimulatorBroker(simulator, gateway, inspection.broker);
