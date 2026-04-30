@@ -59,8 +59,9 @@ The cluster manager UI shows these ports as `Local MQTT: internal:<port>`.
   - `edge/{greenhouse}/zone/+/telemetry/raw`
 - Applies local logic (example irrigation rule from soil moisture).
 - Caches zone assignments in local SQLite.
+- Caches zone threshold configs in local SQLite and evaluates telemetry offline.
 - Publishes normalized uplink to backend topics.
-- Consumes backend downlink registry/command messages.
+- Consumes backend downlink registry/command/threshold messages.
 - Forwards config/commands to local device topics.
 
 ## Topic Mapping
@@ -74,8 +75,8 @@ The cluster manager UI shows these ports as `Local MQTT: internal:<port>`.
 
 ### Backend-facing
 
-- uplink: `gms/{tenant}/{greenhouse}/uplink/{telemetry|registry|status|command_ack}`
-- downlink: `gms/{tenant}/{greenhouse}/downlink/{registry|command}`
+- uplink: `gms/{tenant}/{greenhouse}/uplink/{telemetry|registry|status|command_ack|alert}`
+- downlink: `gms/{tenant}/{greenhouse}/downlink/{registry|command|threshold}`
 
 Telemetry notes:
 
@@ -104,6 +105,7 @@ Edge engine stores local state in SQLite volume:
 
 - outbound buffer (offline uplink queue)
 - zone registry cache (device -> zone assignment)
+- threshold config cache and alert transition state
 
 ## Typical Operator Flow
 
