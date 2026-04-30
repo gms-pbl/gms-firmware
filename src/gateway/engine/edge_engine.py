@@ -34,6 +34,8 @@ cloud_connected = False
 db_conn = None
 
 zone_registry = {}
+threshold_configs = {}
+threshold_alert_states = {}
 last_metrics = {}
 last_snapshot_at = {}
 last_irrigation_state = {}
@@ -42,6 +44,20 @@ last_rehydrate_at = {}
 lock = threading.Lock()
 
 UNSET = object()
+
+SENSOR_KEYS = {
+    "air_temp",
+    "air_hum",
+    "soil_moist",
+    "soil_temp",
+    "soil_cond",
+    "soil_ph",
+    "soil_n",
+    "soil_p",
+    "soil_k",
+    "soil_salinity",
+    "soil_tds",
+}
 
 
 def now_iso():
@@ -101,6 +117,34 @@ def init_db():
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS threshold_config (
+            tenant_id TEXT NOT NULL,
+            greenhouse_id TEXT NOT NULL,
+            zone_id TEXT NOT NULL,
+            config_version INTEGER NOT NULL,
+            thresholds_json TEXT NOT NULL,
+            applied_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (tenant_id, greenhouse_id, zone_id, config_version)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS threshold_alert_state (
+            tenant_id TEXT NOT NULL,
+            greenhouse_id TEXT NOT NULL,
+            zone_id TEXT NOT NULL,
+            device_id TEXT NOT NULL,
+            sensor_key TEXT NOT NULL,
+            severity TEXT NOT NULL,
+            threshold_version INTEGER,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (tenant_id, greenhouse_id, zone_id, device_id, sensor_key)
+        )
+        """
+    )
     conn.commit()
     print(f"[DB] Initialized at {DB_PATH}", flush=True)
     return conn
@@ -128,6 +172,60 @@ def load_zone_registry_cache():
         }
 
     print(f"[REGISTRY] Loaded {len(zone_registry)} cached zone assignments.", flush=True)
+
+
+def load_threshold_config_cache():
+    with lock:
+        rows = db_conn.execute(
+            """
+            SELECT zone_id, config_version, thresholds_json
+            FROM threshold_config tc
+            WHERE tenant_id = ?
+              AND greenhouse_id = ?
+              AND config_version = (
+                  SELECT MAX(config_version)
+                  FROM threshold_config
+                  WHERE tenant_id = tc.tenant_id
+                    AND greenhouse_id = tc.greenhouse_id
+                    AND zone_id = tc.zone_id
+              )
+            """,
+            (TENANT_ID, GREENHOUSE_ID),
+        ).fetchall()
+
+    threshold_configs.clear()
+    for zone_id, config_version, thresholds_json in rows:
+        try:
+            thresholds = json.loads(thresholds_json)
+        except Exception:
+            thresholds = {}
+        threshold_configs[zone_id] = {
+            "config_version": int(config_version),
+            "thresholds": thresholds,
+        }
+
+    print(f"[THRESHOLD] Loaded {len(threshold_configs)} cached zone configs.", flush=True)
+
+
+def load_threshold_alert_state_cache():
+    with lock:
+        rows = db_conn.execute(
+            """
+            SELECT zone_id, device_id, sensor_key, severity, threshold_version
+            FROM threshold_alert_state
+            WHERE tenant_id = ? AND greenhouse_id = ?
+            """,
+            (TENANT_ID, GREENHOUSE_ID),
+        ).fetchall()
+
+    threshold_alert_states.clear()
+    for zone_id, device_id, sensor_key, severity, threshold_version in rows:
+        threshold_alert_states[(zone_id, device_id, sensor_key)] = {
+            "severity": severity or "OK",
+            "threshold_version": threshold_version,
+        }
+
+    print(f"[THRESHOLD] Loaded {len(threshold_alert_states)} cached alert states.", flush=True)
 
 
 def save_zone_registry(device_id, zone_id, zone_name, metadata):
@@ -308,21 +406,229 @@ def publish_gateway_status(state):
     publish_or_buffer(uplink_topic("status"), payload)
 
 
-def publish_command_ack(status, command_id, device_id=None, zone_id=None, reason=None):
+def publish_command_ack(status, command_id, device_id=None, zone_id=None, reason=None, config_version=None, ack_type="COMMAND_ACK"):
     payload = {
         "event_id": uuid_str(),
-        "type": "COMMAND_ACK",
+        "type": ack_type,
         "tenant_id": TENANT_ID,
         "greenhouse_id": GREENHOUSE_ID,
         "gateway_id": GATEWAY_ID,
         "command_id": command_id,
         "device_id": device_id,
         "zone_id": zone_id,
+        "config_version": config_version,
         "status": status,
         "reason": reason,
         "timestamp": now_iso(),
     }
     publish_or_buffer(uplink_topic("command_ack"), payload)
+
+
+def sanitize_threshold_payload(thresholds):
+    if not isinstance(thresholds, dict) or not thresholds:
+        raise ValueError("thresholds must be a non-empty object")
+
+    sanitized = {}
+    for sensor_key, levels in thresholds.items():
+        if sensor_key not in SENSOR_KEYS:
+            raise ValueError(f"unsupported sensor key: {sensor_key}")
+        if not isinstance(levels, dict):
+            raise ValueError(f"{sensor_key} levels must be an object")
+
+        sensor = {}
+        for level in ("normal", "warn", "critical"):
+            bounds = levels.get(level) or {}
+            if not isinstance(bounds, dict):
+                raise ValueError(f"{sensor_key}.{level} must be an object")
+            sensor[level] = sanitize_bounds(sensor_key, level, bounds)
+
+        validate_threshold_envelope(sensor_key, sensor)
+        sanitized[sensor_key] = sensor
+
+    return sanitized
+
+
+def sanitize_bounds(sensor_key, level, bounds):
+    min_value = sanitize_number(bounds.get("min"), f"{sensor_key}.{level}.min")
+    max_value = sanitize_number(bounds.get("max"), f"{sensor_key}.{level}.max")
+    if min_value is not None and max_value is not None and min_value > max_value:
+        raise ValueError(f"{sensor_key}.{level}.min must be <= max")
+    return {"min": min_value, "max": max_value}
+
+
+def sanitize_number(value, label):
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        raise ValueError(f"{label} must be numeric")
+    try:
+        number = float(value)
+    except Exception as exc:
+        raise ValueError(f"{label} must be numeric") from exc
+    if not (number == number and abs(number) != float("inf")):
+        raise ValueError(f"{label} must be finite")
+    return number
+
+
+def validate_threshold_envelope(sensor_key, sensor):
+    normal = sensor["normal"]
+    warn = sensor["warn"]
+    critical = sensor["critical"]
+    require_min_at_or_below(sensor_key, "warn.min", warn.get("min"), "normal.min", normal.get("min"))
+    require_max_at_or_above(sensor_key, "warn.max", warn.get("max"), "normal.max", normal.get("max"))
+    require_min_at_or_below(sensor_key, "critical.min", critical.get("min"), "warn.min", warn.get("min"))
+    require_max_at_or_above(sensor_key, "critical.max", critical.get("max"), "warn.max", warn.get("max"))
+
+
+def require_min_at_or_below(sensor_key, left_label, left, right_label, right):
+    if left is not None and right is not None and left > right:
+        raise ValueError(f"{sensor_key}: {left_label} must be <= {right_label}")
+
+
+def require_max_at_or_above(sensor_key, left_label, left, right_label, right):
+    if left is not None and right is not None and left < right:
+        raise ValueError(f"{sensor_key}: {left_label} must be >= {right_label}")
+
+
+def save_threshold_config(zone_id, config_version, thresholds):
+    thresholds_json = json.dumps(thresholds, sort_keys=True)
+    with lock:
+        db_conn.execute(
+            """
+            INSERT INTO threshold_config(
+                tenant_id,
+                greenhouse_id,
+                zone_id,
+                config_version,
+                thresholds_json,
+                applied_at
+            ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(tenant_id, greenhouse_id, zone_id, config_version)
+            DO UPDATE SET
+                thresholds_json = excluded.thresholds_json,
+                applied_at = CURRENT_TIMESTAMP
+            """,
+            (TENANT_ID, GREENHOUSE_ID, zone_id, int(config_version), thresholds_json),
+        )
+        db_conn.commit()
+
+    threshold_configs[zone_id] = {
+        "config_version": int(config_version),
+        "thresholds": thresholds,
+    }
+
+
+def publish_threshold_alert(device_id, zone_id, sensor_key, severity, value, threshold, config_version):
+    level = "critical" if severity == "CRITICAL" else "warn" if severity == "WARNING" else "normal"
+    bounds = threshold.get(level, {}) if isinstance(threshold, dict) else {}
+    message = build_threshold_alert_message(sensor_key, severity, value, bounds)
+    payload = {
+        "alert_id": uuid_str(),
+        "gateway_id": GATEWAY_ID,
+        "zone_id": zone_id,
+        "device_id": device_id,
+        "sensor_key": sensor_key,
+        "severity": severity,
+        "message": message,
+        "source": "edge",
+        "threshold_version": config_version,
+        "current_value": value,
+        "threshold_min": bounds.get("min"),
+        "threshold_max": bounds.get("max"),
+        "timestamp": now_iso(),
+    }
+    publish_or_buffer(uplink_topic("alert"), payload)
+    print(f"[THRESHOLD] alert zone={zone_id} device={device_id} sensor={sensor_key} severity={severity} value={value}", flush=True)
+
+
+def build_threshold_alert_message(sensor_key, severity, value, bounds):
+    if severity == "INFO":
+        return f"{sensor_key} recovered to {value:.2f}."
+    min_value = bounds.get("min")
+    max_value = bounds.get("max")
+    if min_value is not None and value < min_value:
+        return f"{sensor_key} {severity.lower()} low: {value:.2f} < {min_value:.2f}."
+    if max_value is not None and value > max_value:
+        return f"{sensor_key} {severity.lower()} high: {value:.2f} > {max_value:.2f}."
+    return f"{sensor_key} {severity.lower()} threshold transition: {value:.2f}."
+
+
+def classify_threshold_value(value, threshold):
+    critical = threshold.get("critical") or {}
+    warn = threshold.get("warn") or {}
+
+    if bound_breached(value, critical):
+        return "CRITICAL"
+    if bound_breached(value, warn):
+        return "WARNING"
+    return "OK"
+
+
+def bound_breached(value, bounds):
+    min_value = bounds.get("min")
+    max_value = bounds.get("max")
+    if min_value is not None and value < min_value:
+        return True
+    if max_value is not None and value > max_value:
+        return True
+    return False
+
+
+def save_threshold_alert_state(zone_id, device_id, sensor_key, severity, config_version):
+    with lock:
+        db_conn.execute(
+            """
+            INSERT INTO threshold_alert_state(
+                tenant_id,
+                greenhouse_id,
+                zone_id,
+                device_id,
+                sensor_key,
+                severity,
+                threshold_version,
+                updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(tenant_id, greenhouse_id, zone_id, device_id, sensor_key)
+            DO UPDATE SET
+                severity = excluded.severity,
+                threshold_version = excluded.threshold_version,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (TENANT_ID, GREENHOUSE_ID, zone_id, device_id, sensor_key, severity, config_version),
+        )
+        db_conn.commit()
+
+    threshold_alert_states[(zone_id, device_id, sensor_key)] = {
+        "severity": severity,
+        "threshold_version": config_version,
+    }
+
+
+def evaluate_thresholds(device_id, zone_id, metrics):
+    config = threshold_configs.get(zone_id)
+    if not config:
+        return
+
+    thresholds = config.get("thresholds") or {}
+    config_version = config.get("config_version")
+    for sensor_key, value in metrics.items():
+        threshold = thresholds.get(sensor_key)
+        if not threshold:
+            continue
+
+        severity = classify_threshold_value(value, threshold)
+        state_key = (zone_id, device_id, sensor_key)
+        previous = threshold_alert_states.get(state_key, {}).get("severity", "OK")
+        if severity == previous:
+            continue
+
+        save_threshold_alert_state(zone_id, device_id, sensor_key, severity, config_version)
+        if severity == "OK":
+            if previous != "OK":
+                publish_threshold_alert(device_id, zone_id, sensor_key, "INFO", value, threshold, config_version)
+            continue
+
+        publish_threshold_alert(device_id, zone_id, sensor_key, severity, value, threshold, config_version)
 
 
 def publish_zone_config(device_id, zone_id=None, zone_name=None):
@@ -441,10 +747,11 @@ def handle_local_telemetry(device_id, payload_text):
     if not metrics:
         return
 
+    zone_id, zone_name = resolve_zone(device_id)
     evaluate_local_safety_rules(device_id, metrics)
+    evaluate_thresholds(device_id, zone_id, metrics)
     changed = compute_delta(device_id, metrics)
 
-    zone_id, zone_name = resolve_zone(device_id)
     base_payload = {
         "tenant_id": TENANT_ID,
         "greenhouse_id": GREENHOUSE_ID,
@@ -634,6 +941,67 @@ def handle_downlink_command(payload):
     publish_command_ack("FORWARDED", command_id, device_id=device_id, zone_id=zone_id)
 
 
+def handle_downlink_threshold(payload):
+    command_id = payload.get("command_id") or uuid_str()
+    zone_id = payload.get("zone_id")
+    config_version = payload.get("config_version")
+
+    print(
+        f"[THRESHOLD] Downlink received command_id={command_id} zone={zone_id or '-'} version={config_version or '-'}",
+        flush=True,
+    )
+
+    def fail(reason):
+        print(
+            f"[THRESHOLD] Rejected command_id={command_id} zone={zone_id or '-'} reason={reason}",
+            flush=True,
+        )
+        publish_command_ack(
+            "FAILED",
+            command_id,
+            zone_id=zone_id,
+            reason=reason,
+            config_version=config_version,
+            ack_type="THRESHOLD_CONFIG",
+        )
+
+    if payload.get("tenant_id") != TENANT_ID or payload.get("greenhouse_id") != GREENHOUSE_ID:
+        fail("Threshold payload scope does not match gateway tenant/greenhouse")
+        return
+
+    payload_gateway_id = payload.get("gateway_id")
+    if payload_gateway_id and payload_gateway_id != GATEWAY_ID:
+        fail("Threshold payload gateway_id does not match this gateway")
+        return
+
+    if not zone_id:
+        fail("Missing zone_id")
+        return
+
+    try:
+        config_version = int(config_version)
+    except Exception:
+        fail("Invalid or missing config_version")
+        return
+
+    try:
+        thresholds = sanitize_threshold_payload(payload.get("thresholds"))
+        save_threshold_config(zone_id, config_version, thresholds)
+    except Exception as exc:
+        fail(str(exc))
+        return
+
+    publish_command_ack(
+        "APPLIED",
+        command_id,
+        zone_id=zone_id,
+        reason=f"Applied threshold config v{config_version} for zone {zone_id}",
+        config_version=config_version,
+        ack_type="THRESHOLD_CONFIG",
+    )
+    print(f"[THRESHOLD] Applied zone={zone_id} version={config_version}", flush=True)
+
+
 def on_local_connect(client, userdata, flags, rc):
     if rc != 0:
         print(f"[LOCAL] Connect failed (RC {rc})", flush=True)
@@ -703,6 +1071,10 @@ def on_cloud_message(client, userdata, msg):
         handle_downlink_command(payload)
         return
 
+    if topic == downlink_topic("threshold"):
+        handle_downlink_threshold(payload)
+        return
+
 
 def buffer_flush_loop():
     while True:
@@ -726,6 +1098,8 @@ if __name__ == "__main__":
 
     db_conn = init_db()
     load_zone_registry_cache()
+    load_threshold_config_cache()
+    load_threshold_alert_state_cache()
 
     local_client = mqtt.Client(client_id=f"edge-local-{GATEWAY_ID}")
     local_client.on_connect = on_local_connect
