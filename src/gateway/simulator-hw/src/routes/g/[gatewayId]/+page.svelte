@@ -17,8 +17,17 @@
 		type DigitalInputState,
 		type DigitalOutputState,
 		type SensorState,
+		type SensorThreshold,
+		type ZoneThresholdDebugConfig,
 		type GatewaySimulatorRuntime
 	} from "$lib/sim/types";
+
+	type ThresholdLevel = "normal" | "warn" | "critical";
+	type ThresholdRow = {
+		key: keyof SensorState;
+		label: string;
+		threshold: SensorThreshold;
+	};
 
 	let { data } = $props();
 	const gatewayId = $derived(String(data?.gatewayId ?? ""));
@@ -64,6 +73,7 @@
 	let brokerDraftDirty = $state(false);
 	let sensorDraftDirty = $state(false);
 	let draftsInitialized = $state(false);
+	let thresholdDialogOpen = $state(false);
 
 	let brokerDraft = $state<BrokerConfig>({
 		host: "127.0.0.1",
@@ -242,6 +252,80 @@
 		}
 	}
 
+	function thresholdConfigCount(): number {
+		return visibleThresholdConfigs().length;
+	}
+
+	function activeThresholdZoneId(): string | null {
+		return activeInstance()?.zone_id ?? null;
+	}
+
+	function visibleThresholdConfigs() {
+		const configs = runtime?.threshold_debug?.configs ?? [];
+		const selectedZoneId = activeThresholdZoneId();
+		if (!selectedZoneId) {
+			return configs;
+		}
+		const matches = configs.filter((config) => config.zone_id === selectedZoneId);
+		return matches.length > 0 ? matches : [];
+	}
+
+	function thresholdSummary(): string {
+		const debug = runtime?.threshold_debug;
+		if (!debug) {
+			return "Threshold debug data has not loaded yet.";
+		}
+
+		if (!debug.available) {
+			return debug.reason || "Threshold debug data is unavailable.";
+		}
+
+		if (debug.configs.length === 0) {
+			return "No threshold configs are cached on the edge gateway yet.";
+		}
+
+		const selectedZoneId = activeThresholdZoneId();
+		if (selectedZoneId && visibleThresholdConfigs().length === 0) {
+			return `No cached threshold config for the selected Portenta zone ${selectedZoneId}.`;
+		}
+
+		const count = visibleThresholdConfigs().length;
+		if (selectedZoneId) {
+			return `${count} zone threshold config${count === 1 ? "" : "s"} cached for the selected Portenta zone.`;
+		}
+
+		return `${count} zone threshold config${count === 1 ? "" : "s"} cached on edge.`;
+	}
+
+	function thresholdBadgeVariant(): "default" | "secondary" | "outline" {
+		const debug = runtime?.threshold_debug;
+		if (!debug) return "secondary";
+		if (!debug.available) return "secondary";
+		return thresholdConfigCount() > 0 ? "default" : "outline";
+	}
+
+	function thresholdRows(config: ZoneThresholdDebugConfig): ThresholdRow[] {
+		return sensorKeys
+			.map((key) => {
+				const threshold = config.thresholds[key];
+				return threshold ? { key, label: sensorLabel(key), threshold } : null;
+			})
+			.filter((row): row is ThresholdRow => row !== null);
+	}
+
+	function formatBound(value: number | null | undefined): string {
+		if (value === null || value === undefined) {
+			return "none";
+		}
+
+		return Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 });
+	}
+
+	function formatThresholdRange(threshold: SensorThreshold, level: ThresholdLevel): string {
+		const bounds = threshold[level];
+		return `${formatBound(bounds?.min)} .. ${formatBound(bounds?.max)}`;
+	}
+
 	function applySensorDraft(): void {
 		if (!runtime?.state) {
 			return;
@@ -332,8 +416,12 @@
 			{#if runtime}
 				<div class="flex flex-wrap items-center gap-2">
 					<a href="/" class="rounded border border-slate-300 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-slate-700 hover:bg-slate-50">Gateway Manager</a>
+					<Button variant="outline" size="sm" onclick={() => (thresholdDialogOpen = true)}>Thresholds</Button>
 					<Badge variant={connectedCount() > 0 ? "default" : "secondary"}>
 						{connectedCount()} / {runtime.instances.length} Connected
+					</Badge>
+					<Badge variant={thresholdBadgeVariant()}>
+						{thresholdConfigCount()} Threshold Zones
 					</Badge>
 					<Badge variant="outline" class="font-mono text-[11px]">
 						GH: {runtime.broker.greenhouse_id}
@@ -402,8 +490,25 @@
 							<Button variant="outline" size="sm" disabled={busy} onclick={() => runAction(() => apiPost("/api/disconnect"))}>Disconnect All</Button>
 						</div>
 						<Separator />
+						<div class="rounded-md border border-slate-200 bg-white px-2 py-2">
+							<div class="flex flex-wrap items-start justify-between gap-2">
+								<div class="min-w-0">
+									<p class="text-xs font-semibold text-slate-900">Threshold debug</p>
+									<p class="text-muted-foreground mt-0.5 text-[11px]">{thresholdSummary()}</p>
+								</div>
+								<div class="flex gap-1.5">
+									<Button variant="outline" size="xs" disabled={busy} onclick={() => void refreshRuntime()}>Refresh</Button>
+									<Button size="xs" onclick={() => (thresholdDialogOpen = true)}>Inspect</Button>
+								</div>
+							</div>
+						</div>
+						<Separator />
 						<div class="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
-							<Input class="h-8 text-xs" bind:value={profileName} placeholder="profile name (active instance)" />
+							<div class="grid gap-1">
+								<Label class="text-[11px]" for="profile-name">State profile name</Label>
+								<Input class="h-8 text-xs" id="profile-name" bind:value={profileName} aria-describedby="profile-help" placeholder="default" />
+								<p id="profile-help" class="text-muted-foreground text-[11px]">Save/load the active virtual Portenta sensor state.</p>
+							</div>
 							<div class="flex flex-wrap gap-1.5">
 								<Button size="xs" disabled={busy} onclick={() => runAction(() => apiPost("/api/profiles/save", { name: profileName }))}>Save</Button>
 								<Button variant="outline" size="xs" disabled={busy} onclick={() => runAction(async () => { sensorDraftDirty = false; await apiPost("/api/profiles/load", { name: profileName }); })}>Load</Button>
@@ -513,6 +618,90 @@
 					</div>
 				</CardContent>
 			</Card>
+		{/if}
+
+		{#if runtime && thresholdDialogOpen}
+			<div class="fixed inset-0 z-50 p-4 sm:p-6">
+				<button
+					type="button"
+					class="absolute inset-0 bg-slate-950/45"
+					aria-label="Close threshold inspector"
+					onclick={() => (thresholdDialogOpen = false)}
+				></button>
+				<div
+					class="relative mx-auto grid max-h-[90dvh] w-full max-w-5xl grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
+					role="dialog"
+					aria-modal="true"
+					aria-labelledby="threshold-dialog-title"
+				>
+					<header class="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 px-4 py-3">
+						<div class="min-w-0">
+							<h2 id="threshold-dialog-title" class="text-base font-semibold text-slate-950">Edge threshold configs</h2>
+							<p class="text-muted-foreground mt-1 text-xs">{thresholdSummary()}</p>
+							<p class="text-muted-foreground mt-1 break-all font-mono text-[11px]">Container: {runtime.threshold_debug?.container_name}</p>
+						</div>
+						<div class="flex gap-2">
+							<Button variant="outline" size="sm" disabled={busy} onclick={() => void refreshRuntime()}>Refresh</Button>
+							<Button size="sm" onclick={() => (thresholdDialogOpen = false)}>Close</Button>
+						</div>
+					</header>
+					<div class="min-h-0 overflow-auto px-4 py-3">
+						{#if !runtime.threshold_debug?.available}
+							<p class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+								{runtime.threshold_debug?.reason || "Threshold debug data is unavailable."}
+							</p>
+						{:else if visibleThresholdConfigs().length === 0}
+							<p class="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+								{activeThresholdZoneId()
+									? `No threshold config is currently cached for the selected Portenta zone ${activeThresholdZoneId()}.`
+									: 'No threshold configs are currently stored on this edge gateway. Save thresholds from the frontend, then refresh this panel.'}
+							</p>
+						{:else}
+							<div class="grid gap-3">
+								{#each visibleThresholdConfigs() as config (config.zone_id)}
+									<article class="overflow-hidden rounded-md border border-slate-200">
+										<div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2">
+											<div class="min-w-0">
+												<p class="truncate text-sm font-semibold text-slate-950">Zone {config.zone_id}</p>
+												<p class="text-muted-foreground font-mono text-[11px]">tenant={config.tenant_id} greenhouse={config.greenhouse_id}</p>
+											</div>
+											<div class="flex flex-wrap gap-1.5">
+												<Badge variant="outline">v{config.config_version}</Badge>
+												<Badge variant="secondary">{config.applied_at || "applied_at unknown"}</Badge>
+											</div>
+										</div>
+										<div class="grid gap-0 divide-y divide-slate-100">
+											{#each thresholdRows(config) as row (row.key)}
+												<div class="grid gap-2 px-3 py-2 text-xs md:grid-cols-[10rem_repeat(3,minmax(0,1fr))]">
+													<p class="font-medium text-slate-900">{row.label}</p>
+													<p><span class="text-muted-foreground">Normal</span> <span class="font-mono">{formatThresholdRange(row.threshold, "normal")}</span></p>
+													<p><span class="text-muted-foreground">Warn</span> <span class="font-mono">{formatThresholdRange(row.threshold, "warn")}</span></p>
+													<p><span class="text-muted-foreground">Critical</span> <span class="font-mono">{formatThresholdRange(row.threshold, "critical")}</span></p>
+												</div>
+											{/each}
+										</div>
+									</article>
+								{/each}
+							</div>
+						{/if}
+
+						<div class="mt-4 rounded-md border border-slate-200">
+							<div class="border-b border-slate-200 bg-slate-50 px-3 py-2">
+								<p class="text-sm font-semibold text-slate-950">Recent threshold log lines</p>
+							</div>
+							<div class="grid max-h-56 gap-1 overflow-auto p-2">
+								{#if runtime.threshold_debug?.events.length}
+									{#each runtime.threshold_debug.events as event}
+										<p class="rounded border border-slate-200 bg-white px-2 py-1 font-mono text-[11px] text-slate-800">{event}</p>
+									{/each}
+								{:else}
+									<p class="text-muted-foreground px-2 py-1 text-xs">No `[THRESHOLD]` lines found in recent edge logs.</p>
+								{/if}
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
 		{/if}
 	</div>
 </main>

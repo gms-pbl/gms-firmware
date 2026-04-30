@@ -14,6 +14,34 @@ export interface SensorState {
 	soil_tds: number;
 }
 
+export interface ThresholdBounds {
+	min: number | null;
+	max: number | null;
+}
+
+export interface SensorThreshold {
+	normal: ThresholdBounds;
+	warn: ThresholdBounds;
+	critical: ThresholdBounds;
+}
+
+export interface ZoneThresholdDebugConfig {
+	tenant_id: string;
+	greenhouse_id: string;
+	zone_id: string;
+	config_version: number;
+	applied_at: string | null;
+	thresholds: Partial<Record<keyof SensorState, SensorThreshold>>;
+}
+
+export interface GatewayThresholdDebugStatus {
+	available: boolean;
+	reason: string | null;
+	container_name: string;
+	configs: ZoneThresholdDebugConfig[];
+	events: string[];
+}
+
 export interface DigitalInputState {
 	din_00: BinaryValue;
 	din_01: BinaryValue;
@@ -94,6 +122,7 @@ export interface GatewayContainerStatus {
 	status: string;
 	container_name: string;
 	container_id: string | null;
+	image_id: string | null;
 	host_port: number | null;
 	network_ip: string | null;
 }
@@ -108,6 +137,7 @@ export interface GatewaySummary {
 
 export interface GatewaySimulatorRuntime extends SimulatorRuntime {
 	gateway: GatewaySummary;
+	threshold_debug: GatewayThresholdDebugStatus;
 }
 
 export interface ClusterRuntime {

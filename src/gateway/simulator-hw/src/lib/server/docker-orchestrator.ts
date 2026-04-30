@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import type { GatewayConfig, GatewayContainerStatus } from "$lib/sim/types";
+import type { GatewayConfig, GatewayContainerStatus, GatewayThresholdDebugStatus } from "$lib/sim/types";
 
 export interface GatewayContainerInspection {
 	broker: GatewayContainerStatus;
@@ -16,6 +16,7 @@ interface GatewayContainerNames {
 
 interface DockerInspectContainer {
 	Id: string;
+	Image?: string;
 	State?: {
 		Running?: boolean;
 		Status?: string;
@@ -52,6 +53,25 @@ export class DockerOrchestrator {
 		await this.ensureEdgeContainer(config);
 		await this.startContainer(this.names(config.gateway_id).broker);
 		await this.startContainer(this.names(config.gateway_id).edge);
+	}
+
+	public async reconcileRunningGateway(config: GatewayConfig): Promise<boolean> {
+		const names = this.names(config.gateway_id);
+		const broker = await this.inspectContainer(names.broker, BROKER_PORT_KEY);
+		const edge = await this.inspectContainer(names.edge);
+
+		if (!broker.running && !edge.running) {
+			return false;
+		}
+
+		await this.ensureNetwork();
+		await this.ensureBrokerImage();
+		await this.ensureEdgeImage();
+		await this.ensureBrokerContainer(config);
+		const edgeChanged = await this.ensureEdgeContainer(config);
+		await this.startContainer(names.broker);
+		await this.startContainer(names.edge);
+		return edgeChanged;
 	}
 
 	public async recreateGateway(config: GatewayConfig): Promise<void> {
@@ -99,6 +119,7 @@ export class DockerOrchestrator {
 					status,
 					container_name: names.broker,
 					container_id: null,
+					image_id: null,
 					host_port: null,
 					network_ip: null
 				},
@@ -108,9 +129,73 @@ export class DockerOrchestrator {
 					status,
 					container_name: names.edge,
 					container_id: null,
+					image_id: null,
 					host_port: null,
 					network_ip: null
 				}
+			};
+		}
+	}
+
+	public async readThresholdDebug(gatewayId: string): Promise<GatewayThresholdDebugStatus> {
+		const names = this.names(gatewayId);
+		let events: string[] = [];
+
+		try {
+			const edge = await this.inspectContainer(names.edge);
+			events = edge.exists ? await this.readThresholdLogLines(names.edge) : [];
+			const unavailable = (reason: string): GatewayThresholdDebugStatus => ({
+				available: false,
+				reason,
+				container_name: names.edge,
+				configs: [],
+				events
+			});
+
+			if (!edge.exists) {
+				return unavailable("Edge container is missing.");
+			}
+
+			if (!edge.running) {
+				return unavailable("Edge container is not running.");
+			}
+
+			const output = await this.runDocker([
+				"exec",
+				names.edge,
+				"python",
+				"-c",
+				this.thresholdDebugScript()
+			]);
+
+			const result = JSON.parse(output) as
+				| GatewayThresholdDebugStatus["configs"]
+				| { available?: boolean; reason?: string | null; configs?: GatewayThresholdDebugStatus["configs"] };
+			const configs = Array.isArray(result) ? result : (result.configs ?? []);
+			return {
+				available: Array.isArray(result) ? true : Boolean(result.available),
+				reason: Array.isArray(result) ? null : (result.reason ?? null),
+				container_name: names.edge,
+				configs,
+				events
+			};
+		} catch (error) {
+			if (this.isDockerUnavailable(error)) {
+				return {
+					available: false,
+					reason: "Docker daemon is unavailable.",
+					container_name: names.edge,
+					configs: [],
+					events
+				};
+			}
+
+			return {
+				available: false,
+				reason: error instanceof Error ? error.message : String(error),
+				container_name: names.edge,
+				configs: [],
+				events
 			};
 		}
 	}
@@ -194,11 +279,15 @@ export class DockerOrchestrator {
 		await this.runDocker(args);
 	}
 
-	private async ensureEdgeContainer(config: GatewayConfig): Promise<void> {
+	private async ensureEdgeContainer(config: GatewayConfig): Promise<boolean> {
 		const names = this.names(config.gateway_id);
 		const inspection = await this.inspectContainer(names.edge);
 		if (inspection.exists) {
-			return;
+			if (!(await this.isStaleContainerImage(inspection, this.edgeImage))) {
+				return false;
+			}
+
+			await this.removeContainer(names.edge);
 		}
 
 		const args = [
@@ -241,6 +330,7 @@ export class DockerOrchestrator {
 		];
 
 		await this.runDocker(args);
+		return true;
 	}
 
 	private async startContainer(name: string): Promise<void> {
@@ -294,6 +384,7 @@ export class DockerOrchestrator {
 				status: inspection.State?.Status ?? "unknown",
 				container_name: name,
 				container_id: inspection.Id ?? null,
+				image_id: inspection.Image ?? null,
 				host_port: Number.isFinite(hostPortNumber) ? hostPortNumber : null,
 				network_ip: networkIp
 			};
@@ -312,9 +403,86 @@ export class DockerOrchestrator {
 			status: "missing",
 			container_name: name,
 			container_id: null,
+			image_id: null,
 			host_port: null,
 			network_ip: null
 		};
+	}
+
+	private async isStaleContainerImage(status: GatewayContainerStatus, image: string): Promise<boolean> {
+		if (!status.image_id) {
+			return false;
+		}
+
+		try {
+			const imageId = (await this.runDocker(["image", "inspect", "--format", "{{.Id}}", image])).trim();
+			return Boolean(imageId && imageId !== status.image_id);
+		} catch (error) {
+			if (this.isNotFound(error)) {
+				throw new Error(`Edge image '${image}' is missing. Build it first (try ./scripts/up-cluster.sh).`);
+			}
+			throw error;
+		}
+	}
+
+	private async readThresholdLogLines(containerName: string): Promise<string[]> {
+		try {
+			const output = await this.runDocker(["logs", "--tail", "160", containerName]);
+			return output
+				.split(/\r?\n/)
+				.map((line) => line.trim())
+				.filter((line) => line.includes("[THRESHOLD]"))
+				.slice(-60)
+				.reverse();
+		} catch {
+			return [];
+		}
+	}
+
+	private thresholdDebugScript(): string {
+		return `import json, os, sqlite3
+path = os.environ.get("EDGE_DB_PATH", "/app/data/offline_buffer.db")
+tenant_id = os.environ.get("TENANT_ID", "")
+greenhouse_id = os.environ.get("GREENHOUSE_ID", "")
+conn = sqlite3.connect(path)
+conn.row_factory = sqlite3.Row
+table_exists = conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'threshold_config'").fetchone()
+if not table_exists:
+    print(json.dumps({
+        "available": False,
+        "reason": "Edge DB schema is missing threshold_config. Recreate/start this gateway with the current edge image.",
+        "configs": []
+    }))
+    raise SystemExit(0)
+rows = conn.execute("""
+SELECT tenant_id, greenhouse_id, zone_id, config_version, thresholds_json, applied_at
+FROM threshold_config tc
+WHERE tenant_id = ?
+  AND greenhouse_id = ?
+  AND config_version = (
+    SELECT MAX(config_version)
+    FROM threshold_config
+    WHERE tenant_id = tc.tenant_id
+      AND greenhouse_id = tc.greenhouse_id
+      AND zone_id = tc.zone_id
+  )
+ORDER BY zone_id
+""", (tenant_id, greenhouse_id)).fetchall()
+print(json.dumps({
+    "available": True,
+    "reason": None,
+    "configs": [
+        {
+            "tenant_id": row["tenant_id"],
+            "greenhouse_id": row["greenhouse_id"],
+            "zone_id": row["zone_id"],
+            "config_version": int(row["config_version"]),
+            "applied_at": row["applied_at"],
+            "thresholds": json.loads(row["thresholds_json"] or "{}"),
+        }
+        for row in rows
+    ]
+}))`;
 	}
 
 	private async removeVolume(name: string): Promise<void> {
