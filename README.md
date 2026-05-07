@@ -16,11 +16,12 @@ Firmware-side workspace for gateway and zone devices.
 
 ```mermaid
 flowchart LR
-  P[Portenta or Simulator Device] -->|edge local announce and telemetry| M[Gateway Local MQTT]
-  M --> E[Edge Engine]
-  E -->|gms tenant greenhouse uplink| B[Spring Backend]
-  B -->|gms tenant greenhouse downlink| E
-  E -->|edge config and output command| M
+  P[Portenta or Simulator Device] -->|edge local announce and telemetry| L[Gateway Local Broker]
+  L --> E[Edge Engine]
+  E -->|gms tenant greenhouse uplink| C[Cloud or Global MQTT Broker]
+  C --> B[Spring Backend]
+  B -->|gms tenant greenhouse downlink| C
+  E -->|edge config and output command| L
   F[React Frontend] <-->|REST + session auth| B
 ```
 
@@ -39,8 +40,10 @@ flowchart LR
 - `gms/{tenant}/{greenhouse}/uplink/registry`
 - `gms/{tenant}/{greenhouse}/uplink/status`
 - `gms/{tenant}/{greenhouse}/uplink/command_ack`
+- `gms/{tenant}/{greenhouse}/uplink/alert`
 - `gms/{tenant}/{greenhouse}/downlink/registry`
 - `gms/{tenant}/{greenhouse}/downlink/command`
+- `gms/{tenant}/{greenhouse}/downlink/threshold`
 
 ## Gateway Operation Modes
 
@@ -49,9 +52,12 @@ flowchart LR
 ```bash
 cd firmware/src/gateway
 ./scripts/up.sh
+# or hardware-only
+./scripts/up-prod.sh
 ```
 
-- Local broker exposed on `localhost:1883`
+- Cloud/global broker exposed on `localhost:1883`
+- Local greenhouse broker exposed on `localhost:18831`
 - Simulator UI (if enabled) on `localhost:4173`
 
 ### Cluster simulation mode
@@ -81,7 +87,7 @@ From repository root:
 
 ```bash
 cd firmware/src/gateway
-./scripts/up-cluster.sh
+./scripts/up-prod.sh
 
 cd ../../../backend/infra
 ./scripts/up.sh
@@ -93,7 +99,19 @@ npm run dev
 Open:
 
 - Frontend greenhouse page: `http://localhost:5173/g`
-- Gateway cluster manager: `http://localhost:4173`
+- Gateway cluster manager: `http://localhost:4173` (only in cluster/simulator mode)
+
+## Helper Scripts
+
+From `firmware/src/gateway`:
+
+```bash
+./scripts/clean-containters.sh
+./scripts/verify-ports.sh
+```
+
+- `clean-containters.sh` removes known stale gateway/simulator containers that can keep old brokers alive.
+- `verify-ports.sh` reports listeners on `1883`, `18831`, `18832`, and `4173` before or after switching modes.
 
 ## Environment Alignment Rules
 

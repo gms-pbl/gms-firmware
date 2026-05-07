@@ -8,7 +8,8 @@ Gateway runtime for local edge processing, broker bridging, and simulator manage
 
 Services:
 
-- `mosquitto` -> local MQTT LAN broker
+- `cloud_broker` -> cloud/global MQTT entrypoint for backend <-> gateway traffic on host `1883`
+- `local_broker` -> local greenhouse MQTT broker for Portenta/simulator traffic on host `18831`
 - `edge_engine` -> local processing, registry cache, MQTT bridge
 - `simulator_hw` -> optional virtual hardware UI (profile: `simulator`)
 
@@ -17,12 +18,10 @@ Start/stop from `firmware/src/gateway`:
 ```bash
 ./scripts/up.sh
 ./scripts/down.sh
-```
 
-Optional selective start:
-
-```bash
-./scripts/up.sh edge_engine simulator_hw
+# hardware only (no simulator)
+./scripts/up-prod.sh
+./scripts/down-prod.sh
 ```
 
 ### 2) Cluster simulation mode (`docker-compose.cluster.yml`)
@@ -47,7 +46,8 @@ Cluster manager creates per-gateway containers on demand:
 ## Ports
 
 - `4173` -> simulator / cluster manager UI
-- `1883` -> shared cloud broker (cluster mode) or local broker (single mode)
+- `1883` -> cloud/global broker in single-gateway mode and shared cloud broker in cluster mode
+- `18831` -> local greenhouse broker in single-gateway mode
 - per-gateway local broker host ports -> auto-assigned unique ports (default base `18831`) in cluster mode
 
 The cluster manager UI shows these ports as `Local MQTT: internal:<port>`.
@@ -95,6 +95,8 @@ Edge engine variables (in compose or per-gateway runtime config):
 - `CLOUD_USERNAME`, `CLOUD_PASSWORD`
 - `CONFIG_REHYDRATE_COOLDOWN_SEC`
 
+Single-gateway `.env` lives at `firmware/src/gateway/.env` and currently drives both broker layers.
+
 Cluster manager tuning:
 
 - `GATEWAY_HOST_MQTT_PORT_BASE` (default `18831`)
@@ -120,12 +122,31 @@ Edge engine stores local state in SQLite volume:
 
 Portenta devices must connect to gateway local broker endpoints only (`MQTT_BROKER` + node-specific `MQTT_PORT`), never directly to public/cloud brokers.
 
+For the current single-gateway hardware topology that means:
+
+- backend/cloud broker: host `1883`
+- Portenta/local broker: host `18831`
+
+Use the cleanup helpers before switching from cluster mode to single-gateway hardware mode so stale `gms_sim_*` brokers do not keep old ports alive.
+
+## Helper Scripts
+
+```bash
+./scripts/clean-containters.sh
+./scripts/verify-ports.sh
+```
+
+- `clean-containters.sh` removes known stale single-gateway and dynamic cluster containers.
+- `verify-ports.sh` reports open listeners on `1883`, `18831`, `18832`, and `4173`.
+
 ## Debug Tips
 
 Single gateway mode:
 
 ```bash
+./scripts/verify-ports.sh
 docker logs -f gms_edge_engine
+docker logs -f gms_cloud_broker
 docker logs -f gms_local_broker
 docker logs -f gms_simulator_hw
 ```
