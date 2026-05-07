@@ -44,9 +44,9 @@ File: `firmware/src/portenta/.env`
 ```env
 WIFI_SSID="your-wifi"
 WIFI_PASS="your-pass"
-MQTT_BROKER="192.168.1.32"      # gateway mini PC IP
-MQTT_PORT="18831"               # node-local broker port exposed by cluster gateway
-GREENHOUSE_ID="greenhouse-demo" # must match gateway GREENHOUSE_ID
+MQTT_BROKER="192.168.1.32" # machine running the gateway stack
+MQTT_PORT="18831"          # single-gateway local broker port
+GREENHOUSE_ID="home"       # must match gateway GREENHOUSE_ID
 
 # Optional:
 # DEVICE_ID="portenta-dev-01"
@@ -79,6 +79,21 @@ From `firmware/src/portenta`:
 4. Gateway may push cached config (`zone_id`, `zone_name`).
 5. Device applies config and publishes telemetry continuously.
 6. Commands from backend route through gateway to `command/output`.
+
+## Connecting Hardware to Single-Gateway Mode
+
+When using the no-simulator hardware stack (`firmware/src/gateway/scripts/up-prod.sh`):
+
+1. Set Portenta `.env` to the host machine LAN IP and the local broker port.
+2. Keep `GREENHOUSE_ID` aligned with `firmware/src/gateway/.env`.
+
+```env
+MQTT_BROKER="192.168.1.32"
+MQTT_PORT="18831"
+GREENHOUSE_ID="home"
+```
+
+The backend uses the separate cloud/global broker on host `1883`; Portenta must continue to use only the local broker on `18831`.
 
 ## Connecting Hardware to Cluster Gateway
 
@@ -124,6 +139,7 @@ Notes:
 ## Before Plugging Real Hardware
 
 - Ensure gateway stack is running (`firmware/src/gateway/scripts/up.sh` or `firmware/src/gateway/scripts/up-cluster.sh`).
+- For no-simulator hardware tests, use `firmware/src/gateway/scripts/up-prod.sh` and keep Portenta on `MQTT_PORT=18831`.
 - Ensure backend is running (`backend/infra/scripts/up.sh`, or `backend/infra/scripts/up.sh -v` to follow logs).
 - Ensure frontend greenhouse/zone page uses the same greenhouse id.
 
