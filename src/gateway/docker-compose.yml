@@ -1,41 +1,55 @@
 services:
-  # The Local MQTT Broker
-  mosquitto:
+  # Cloud/global MQTT broker used by backend <-> gateway traffic.
+  cloud_broker:
     image: eclipse-mosquitto:2.0
-    container_name: gms_local_broker
+    container_name: gms_cloud_broker
+    command:
+      - /bin/sh
+      - -c
+      - >
+        printf 'listener ${CLOUD_BROKER_PORT:-1883}\nallow_anonymous true\npersistence true\npersistence_location /mosquitto/data/\nlog_dest file /mosquitto/log/mosquitto.log\n'
+        > /tmp/mosquitto.conf
+        && exec mosquitto -c /tmp/mosquitto.conf
     ports:
-      - "1883:1883"
+      - "${CLOUD_BROKER_PORT:-1883}:${CLOUD_BROKER_PORT:-1883}"
     volumes:
-      - ./mosquitto/config:/mosquitto/config:ro,z
-      - mosquitto_data:/mosquitto/data
-      - mosquitto_log:/mosquitto/log
+      - cloud_broker_data:/mosquitto/data
+      - cloud_broker_log:/mosquitto/log
     restart: unless-stopped
 
-  # The Local Decision & Processing Engine
+  # Local greenhouse MQTT broker used by gateway <-> Portenta traffic.
+  local_broker:
+    image: eclipse-mosquitto:2.0
+    container_name: gms_local_broker
+    command:
+      - /bin/sh
+      - -c
+      - >
+        printf 'listener ${LOCAL_BROKER_PORT:-18831}\nallow_anonymous true\npersistence true\npersistence_location /mosquitto/data/\nlog_dest file /mosquitto/log/mosquitto.log\n'
+        > /tmp/mosquitto.conf
+        && exec mosquitto -c /tmp/mosquitto.conf
+    ports:
+      - "${LOCAL_BROKER_PORT:-18831}:${LOCAL_BROKER_PORT:-18831}"
+    volumes:
+      - local_broker_data:/mosquitto/data
+      - local_broker_log:/mosquitto/log
+    restart: unless-stopped
+
+  # The local decision and processing engine.
   edge_engine:
     build:
       context: ./engine
       dockerfile: Dockerfile
     container_name: gms_edge_engine
     depends_on:
-      - mosquitto
+      - cloud_broker
+      - local_broker
     volumes:
       - ./engine:/app:z
       - edge_database:/app/data
     restart: unless-stopped
-    environment:
-      - LOCAL_BROKER_HOST=mosquitto
-      - LOCAL_BROKER_PORT=1883
-      # Local integration default: publish uplink/downlink against local broker.
-      # Override these to your real cloud MQTT broker host/port for WAN runs.
-      - CLOUD_BROKER_HOST=mosquitto
-      - CLOUD_BROKER_PORT=1883
-      - CLOUD_USERNAME=edge_gateway_1
-      - CLOUD_PASSWORD=secret_cert_or_pass
-      - TENANT_ID=test
-      - GREENHOUSE_ID=test
-      - GATEWAY_ID=test
-      - CONFIG_REHYDRATE_COOLDOWN_SEC=45
+    env_file:
+      - ./.env
 
   simulator_hw:
     profiles: ["simulator"]
@@ -46,15 +60,15 @@ services:
     working_dir: /app
     command: sh -lc "bun install --ignore-scripts && bun run dev --host 0.0.0.0 --port 4173"
     depends_on:
-      - mosquitto
+      - local_broker
     ports:
       - "4173:4173"
     environment:
       - HOST=0.0.0.0
       - PORT=4173
-      - MQTT_HOST=mosquitto
-      - MQTT_PORT=1883
-      - GREENHOUSE_ID=test
+      - MQTT_HOST=${LOCAL_BROKER_HOST:-local_broker}
+      - MQTT_PORT=${LOCAL_BROKER_PORT:-18831}
+      - GREENHOUSE_ID=${GREENHOUSE_ID:-test}
       - PUBLISH_INTERVAL_MS=10000
       - AUTO_CONNECT=true
       - SIM_DATA_DIR=/app/sim-data
@@ -67,9 +81,13 @@ services:
 volumes:
   edge_database:
     name: gms_edge_sqlite_db
+  cloud_broker_data:
+    name: gms_cloud_broker_data
+  cloud_broker_log:
+    name: gms_cloud_broker_log
+  local_broker_data:
+    name: gms_local_broker_data
+  local_broker_log:
+    name: gms_local_broker_log
   simulator_hw_data:
     name: gms_simulator_hw_data
-  mosquitto_data:
-    name: gms_mosquitto_data
-  mosquitto_log:
-    name: gms_mosquitto_log
