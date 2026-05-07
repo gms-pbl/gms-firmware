@@ -8,5 +8,5 @@ GATEWAY_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 "${SCRIPT_DIR}/verify-ports.sh"
 
 cd "${GATEWAY_ROOT}"
-docker compose --profile simulator build --pull
-exec docker compose --profile simulator up -d --build --pull always --force-recreate --remove-orphans "$@"
+docker compose build --pull cloud_broker local_broker edge_engine
+exec docker compose up -d --build --pull always --force-recreate --remove-orphans cloud_broker local_broker edge_engine "$@"
