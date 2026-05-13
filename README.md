@@ -47,19 +47,6 @@ flowchart LR
 
 ## Gateway Operation Modes
 
-### Single gateway mode
-
-```bash
-cd firmware/src/gateway
-./scripts/up.sh
-# or hardware-only
-./scripts/up-prod.sh
-```
-
-- Cloud/global broker exposed on `localhost:1883`
-- Local greenhouse broker exposed on `localhost:18831`
-- Simulator UI (if enabled) on `localhost:4173`
-
 ### Cluster simulation mode
 
 ```bash
@@ -70,6 +57,17 @@ cd firmware/src/gateway
 - Cluster manager UI on `localhost:4173`
 - Shared cloud broker on `localhost:1883` (for edge -> backend)
 - Each simulated gateway gets an auto-assigned unique local MQTT host port (starting around `18831`)
+
+### Single gateway hardware mode
+
+```bash
+cd firmware/src/gateway
+./scripts/up-prod.sh
+```
+
+- Cloud/global broker exposed on `localhost:1883`
+- Local greenhouse broker exposed on `localhost:18831`
+- No simulator UI is started in this mode
 
 ## Hardware Safety Rule (Important)
 
@@ -99,7 +97,7 @@ npm run dev
 Open:
 
 - Frontend greenhouse page: `http://localhost:5173/g`
-- Gateway cluster manager: `http://localhost:4173` (only in cluster/simulator mode)
+- Gateway cluster manager: `http://localhost:4173` (cluster simulation mode)
 
 ## Helper Scripts
 

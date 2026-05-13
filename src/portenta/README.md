@@ -138,7 +138,7 @@ Notes:
 
 ## Before Plugging Real Hardware
 
-- Ensure gateway stack is running (`firmware/src/gateway/scripts/up.sh` or `firmware/src/gateway/scripts/up-cluster.sh`).
+- Ensure gateway stack is running (`firmware/src/gateway/scripts/up-cluster.sh` for simulator work, or `firmware/src/gateway/scripts/up-prod.sh` for hardware-only single-gateway runs).
 - For no-simulator hardware tests, use `firmware/src/gateway/scripts/up-prod.sh` and keep Portenta on `MQTT_PORT=18831`.
 - Ensure backend is running (`backend/infra/scripts/up.sh`, or `backend/infra/scripts/up.sh -v` to follow logs).
 - Ensure frontend greenhouse/zone page uses the same greenhouse id.
