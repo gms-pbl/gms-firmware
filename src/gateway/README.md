@@ -4,22 +4,17 @@ Gateway runtime for local edge processing, broker bridging, and simulator manage
 
 ## Modes
 
-### 1) Single gateway mode (`docker-compose.yml`)
+### 1) Single gateway hardware mode (`docker-compose.yml`)
 
 Services:
 
 - `cloud_broker` -> cloud/global MQTT entrypoint for backend <-> gateway traffic on host `1883`
-- `local_broker` -> local greenhouse MQTT broker for Portenta/simulator traffic on host `18831`
+- `local_broker` -> local greenhouse MQTT broker for Portenta traffic on host `18831`
 - `edge_engine` -> local processing, registry cache, MQTT bridge
-- `simulator_hw` -> optional virtual hardware UI (profile: `simulator`)
 
 Start/stop from `firmware/src/gateway`:
 
 ```bash
-./scripts/up.sh
-./scripts/down.sh
-
-# hardware only (no simulator)
 ./scripts/up-prod.sh
 ./scripts/down-prod.sh
 ```
@@ -45,9 +40,9 @@ Cluster manager creates per-gateway containers on demand:
 
 ## Ports
 
-- `4173` -> simulator / cluster manager UI
-- `1883` -> cloud/global broker in single-gateway mode and shared cloud broker in cluster mode
-- `18831` -> local greenhouse broker in single-gateway mode
+- `4173` -> simulator / cluster manager UI in cluster mode
+- `1883` -> cloud/global broker in single-gateway hardware mode and shared cloud broker in cluster mode
+- `18831` -> local greenhouse broker in single-gateway hardware mode
 - per-gateway local broker host ports -> auto-assigned unique ports (default base `18831`) in cluster mode
 
 The cluster manager UI shows these ports as `Local MQTT: internal:<port>`.
@@ -95,7 +90,7 @@ Edge engine variables (in compose or per-gateway runtime config):
 - `CLOUD_USERNAME`, `CLOUD_PASSWORD`
 - `CONFIG_REHYDRATE_COOLDOWN_SEC`
 
-Single-gateway `.env` lives at `firmware/src/gateway/.env` and currently drives both broker layers.
+Single-gateway hardware `.env` lives at `firmware/src/gateway/.env` and drives both broker layers.
 
 Cluster manager tuning:
 
@@ -141,14 +136,13 @@ Use the cleanup helpers before switching from cluster mode to single-gateway har
 
 ## Debug Tips
 
-Single gateway mode:
+Single gateway hardware mode:
 
 ```bash
 ./scripts/verify-ports.sh
 docker logs -f gms_edge_engine
 docker logs -f gms_cloud_broker
 docker logs -f gms_local_broker
-docker logs -f gms_simulator_hw
 ```
 
 Cluster mode (example gateway `test1`):
